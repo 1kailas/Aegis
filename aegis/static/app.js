@@ -41,7 +41,7 @@ function showToast(msg, kind = "info") {
   }, 2800);
 }
 
-window.copySnippet = function(text) {
+function copySnippet(text) {
   if (navigator.clipboard) {
     navigator.clipboard.writeText(text).then(() => {
       showToast(`Copied to clipboard: ${text}`, "ok");
@@ -49,7 +49,8 @@ window.copySnippet = function(text) {
   } else {
     fallbackCopy(text);
   }
-};
+}
+window.copySnippet = copySnippet;
 
 function fallbackCopy(text) {
   const ta = document.createElement("textarea");
@@ -64,7 +65,7 @@ function fallbackCopy(text) {
 // ------------------------------------------------------------- Navigation & Shortcuts
 const TABS = ["overview", "cluster", "models", "workloads", "incidents", "hardware", "ai", "engineering", "policy"];
 
-window.switchTab = function(tabName) {
+function switchTab(tabName) {
   document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
   document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
 
@@ -82,7 +83,8 @@ window.switchTab = function(tabName) {
   if (tabName === "engineering") refreshDevin();
   if (tabName === "policy") refreshAudit();
   if (tabName === "hardware") pollSensors();
-};
+}
+window.switchTab = switchTab;
 
 document.querySelectorAll(".nav-btn").forEach(btn => {
   btn.addEventListener("click", () => switchTab(btn.dataset.tab));
@@ -103,15 +105,15 @@ window.addEventListener("keydown", (e) => {
     if ($("incidentDetailPanel")) $("incidentDetailPanel").style.display = "none";
   } else if (e.key === "/") {
     e.preventDefault();
-    $("globalSearch").focus();
+    if ($("globalSearch")) $("globalSearch").focus();
   } else if (e.key >= "1" && e.key <= "8") {
     const idx = parseInt(e.key, 10) - 1;
     if (TABS[idx]) switchTab(TABS[idx]);
   }
 });
 
-$("cliDocsBtn").addEventListener("click", () => { $("cliModal").style.display = "flex"; });
-$("closeCliModalBtn").addEventListener("click", () => { $("cliModal").style.display = "none"; });
+$("cliDocsBtn")?.addEventListener("click", () => { $("cliModal").style.display = "flex"; });
+$("closeCliModalBtn")?.addEventListener("click", () => { $("cliModal").style.display = "none"; });
 
 // ------------------------------------------------------------- Live Ping & Health Meter
 async function measurePing() {
@@ -435,7 +437,7 @@ async function refreshCluster() {
   } catch {}
 }
 
-window.drainNode = async function(nodeId) {
+async function drainNode(nodeId) {
   if (!confirm(`Are you sure you want to cordon and drain node '${nodeId}'?`)) return;
   try {
     const res = await (await fetch(`/api/cluster/nodes/${nodeId}/drain`, {
@@ -448,9 +450,10 @@ window.drainNode = async function(nodeId) {
   } catch (e) {
     showToast(`Drain error: ${e}`, "crit");
   }
-};
+}
+window.drainNode = drainNode;
 
-window.rollbackCanary = async function(rolloutId) {
+async function rollbackCanary(rolloutId) {
   if (!confirm(`Trigger emergency rollback for ${rolloutId}?`)) return;
   try {
     await fetch(`/api/canary/rollouts/${rolloutId}/rollback`, {
@@ -463,7 +466,8 @@ window.rollbackCanary = async function(rolloutId) {
   } catch (e) {
     showToast(`Rollback error: ${e}`, "crit");
   }
-};
+}
+window.rollbackCanary = rollbackCanary;
 
 function setupClusterJoinCommands() {
   const hostInput = $("clusterHostInput");
@@ -647,7 +651,7 @@ async function refreshBenchmarks() {
   } catch {}
 }
 
-window.runBenchmark = async function(modelName) {
+async function runBenchmark(modelName) {
   showToast(`Running inference benchmark for ${modelName}...`, "info");
   try {
     const res = await (await fetch("/api/models/benchmark", {
@@ -660,9 +664,10 @@ window.runBenchmark = async function(modelName) {
   } catch (e) {
     showToast(`Benchmark error: ${e}`, "crit");
   }
-};
+}
+window.runBenchmark = runBenchmark;
 
-window.optimizeVram = async function() {
+async function optimizeVram() {
   showToast("Optimizing AI model memory allocation...", "info");
   try {
     const res = await (await fetch("/api/models/optimize", { method: "POST" })).json();
@@ -670,9 +675,10 @@ window.optimizeVram = async function() {
   } catch (e) {
     showToast(`Optimize error: ${e}`, "crit");
   }
-};
+}
+window.optimizeVram = optimizeVram;
 
-window.openClusterCapacityModal = async function() {
+async function openClusterCapacityModal() {
   try {
     const cap = await (await fetch("/api/models/cluster-capacity")).json();
     const hw = cap.concurrent_model_headroom || {};
@@ -738,8 +744,10 @@ window.openClusterCapacityModal = async function() {
   } catch (e) {
     showToast(`Error fetching cluster capacity: ${e}`, "crit");
   }
-};
-window.deployModel = async function(modelName, runtime = "docker") {
+}
+window.openClusterCapacityModal = openClusterCapacityModal;
+
+async function deployModel(modelName, runtime = "docker") {
   showToast(`Deploying ${modelName} to ${runtime}...`, "info");
   try {
     const res = await (await fetch("/api/models/deploy", {
@@ -752,20 +760,22 @@ window.deployModel = async function(modelName, runtime = "docker") {
   } catch (e) {
     showToast(`Deployment error: ${e}`, "crit");
   }
-};
+}
+window.deployModel = deployModel;
 
-window.viewK8sManifest = async function(modelName) {
+async function viewK8sManifest(modelName) {
   try {
     const res = await (await fetch(`/api/orchestration/manifests/k8s?model_name=${modelName}`)).json();
     $("manifestModalTitle").textContent = `Kubernetes Manifest: ${modelName}`;
     $("manifestModalContent").textContent = res.manifest_yaml;
-    $(manifestModal").style.display = "flex";
+    $("manifestModal").style.display = "flex";
   } catch (e) {
     showToast(`Error generating manifest: ${e}`, "crit");
   }
-};
+}
+window.viewK8sManifest = viewK8sManifest;
 
-window.stopDeployment = async function(depId) {
+async function stopDeployment(depId) {
   if (!confirm(`Stop deployment ${depId}?`)) return;
   try {
     await fetch(`/api/models/deployments/${depId}/stop`, { method: "POST" });
@@ -774,9 +784,10 @@ window.stopDeployment = async function(depId) {
   } catch (e) {
     showToast(`Error stopping: ${e}`, "crit");
   }
-};
+}
+window.stopDeployment = stopDeployment;
 
-$(closeManifestModalBtn")?.addEventListener("click", () => { $("manifestModal").style.display = "none"; });
+$("closeManifestModalBtn")?.addEventListener("click", () => { $("manifestModal").style.display = "none"; });
 $("copyManifestBtn")?.addEventListener("click", () => { copySnippet($("manifestModalContent").textContent); });
 $("refreshModelsBtn")?.addEventListener("click", refreshModels);
 $("optimizeVramBtn")?.addEventListener("click", optimizeVram);
@@ -841,7 +852,7 @@ async function refreshDocker() {
   } catch {}
 }
 
-window.viewContainerLogs = async function(cid, name) {
+async function viewContainerLogs(cid, name) {
   try {
     const res = await (await fetch(`/api/workloads/docker/${cid}/logs?tail=100`)).json();
     $("logViewerTitle").textContent = `Logs: ${name}`;
@@ -851,9 +862,10 @@ window.viewContainerLogs = async function(cid, name) {
   } catch (e) {
     showToast(`Error fetching logs: ${e}`, "crit");
   }
-};
+}
+window.viewContainerLogs = viewContainerLogs;
 
-window.restartContainer = async function(cid) {
+async function restartContainer(cid) {
   if (!confirm("Authorize policy restart for container?")) return;
   try {
     const res = await (await fetch(`/api/workloads/docker/${cid}/restart`, { method: "POST" })).json();
@@ -862,7 +874,8 @@ window.restartContainer = async function(cid) {
   } catch (e) {
     showToast(`Error restarting container: ${e}`, "crit");
   }
-};
+}
+window.restartContainer = restartContainer;
 
 $("closeLogsBtn")?.addEventListener("click", () => { $("logViewerPanel").style.display = "none"; });
 $("copyLogsBtn")?.addEventListener("click", () => { copySnippet($("logViewerContent").textContent); });
@@ -914,7 +927,7 @@ async function refreshIncidents() {
   } catch {}
 }
 
-window.selectIncident = async function(iid) {
+async function selectIncident(iid) {
   activeIncidentId = iid;
   try {
     const list = await (await fetch("/api/incidents")).json();
@@ -935,7 +948,8 @@ window.selectIncident = async function(iid) {
     $("incidentDetailPanel").style.display = "block";
     $("incidentDetailPanel").scrollIntoView({ behavior: "smooth" });
   } catch {}
-};
+}
+window.selectIncident = selectIncident;
 
 $("copyIncCliBtn")?.addEventListener("click", () => {
   if (activeIncidentId) copySnippet(`aegis incidents diagnose ${activeIncidentId}`);
@@ -1153,7 +1167,7 @@ async function refreshAudit() {
   } catch {}
 }
 
-window.applyDemo = async function(kind) {
+async function applyDemo(kind) {
   try {
     await fetch("/api/demo/override", {
       method: "POST",
@@ -1166,7 +1180,8 @@ window.applyDemo = async function(kind) {
   } catch (e) {
     showToast(`Demo error: ${e}`, "crit");
   }
-};
+}
+window.applyDemo = applyDemo;
 
 $("createApiKeyBtn")?.addEventListener("click", async () => {
   const name = prompt("Enter a friendly name for this API key (e.g. worker-node-01):");
@@ -1187,7 +1202,7 @@ $("createApiKeyBtn")?.addEventListener("click", async () => {
 });
 
 // ------------------------------------------------------------- Controls & SSE
-$("modeToggle").addEventListener("change", async (e) => {
+$("modeToggle")?.addEventListener("change", async (e) => {
   const mode = e.target.checked ? "policy_autonomous" : "monitoring_only";
   try {
     await fetch("/api/policy/mode", {
@@ -1202,7 +1217,7 @@ $("modeToggle").addEventListener("change", async (e) => {
   }
 });
 
-$("estopBtn").addEventListener("click", async () => {
+$("estopBtn")?.addEventListener("click", async () => {
   const active = $("estopBtn").classList.contains("active");
   try {
     await fetch("/api/policy/emergency_stop", {
@@ -1215,6 +1230,13 @@ $("estopBtn").addEventListener("click", async () => {
   } catch (e) {
     showToast(`Error setting emergency stop: ${e}`, "crit");
   }
+});
+
+// Click outside modal backdrop to dismiss
+document.querySelectorAll(".modal-backdrop").forEach(backdrop => {
+  backdrop.addEventListener("click", (e) => {
+    if (e.target === backdrop) backdrop.style.display = "none";
+  });
 });
 
 function initSSE() {
