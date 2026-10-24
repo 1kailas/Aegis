@@ -194,6 +194,20 @@ class ClusterMeshManager:
             out.append(item)
         return out
 
+    def deregister_node(self, node_id: str) -> bool:
+        """Removes a node completely from the cluster mesh."""
+        row = self.db.query_one("SELECT hostname FROM cluster_nodes WHERE node_id=?", (node_id,))
+        if not row:
+            return False
+        self.db.execute("DELETE FROM cluster_nodes WHERE node_id=?", (node_id,))
+        self.events.emit(
+            "cluster",
+            f"Node {row['hostname']} ({node_id}) removed from cluster mesh",
+            "info",
+            node_id=node_id,
+        )
+        return True
+
     def cluster_summary(self) -> dict[str, Any]:
         """Provides aggregate capacity and health metrics across all nodes."""
         nodes = self.list_nodes()
@@ -202,30 +216,57 @@ class ClusterMeshManager:
         drained_nodes = sum(1 for n in nodes if n["status"] == "DRAINED")
         offline_nodes = sum(1 for n in nodes if n["status"] == "OFFLINE")
 
-        # Aggregate CPU & Memory across reporting nodes
-        total_mem_mb = 0
-        used_mem_mb = 0
+        total_cores = 0
+        total_ram_gb = 0.0
+        used_ram_gb = 0.0
         cpu_samples = []
 
         for n in nodes:
+            lbls = n.get("labels") or {}
+            try:
+                cores = int(lbls.get("cores", 1))
+            except (ValueError, TypeError):
+                cores = 1
+            total_cores += cores
+
             t = n.get("telemetry_summary") or {}
             mem = t.get("memory") or {}
+            node_ram_gb = 0.0
             if mem.get("total_mb"):
-                total_mem_mb += mem.get("total_mb", 0)
-                used_mem_mb += mem.get("used_mb", 0)
+                node_ram_gb = mem["total_mb"] / 1024.0
+                used_ram_gb += mem.get("used_mb", 0) / 1024.0
+            elif "ram_total_gb" in t:
+                node_ram_gb = float(t["ram_total_gb"])
+                used_ram_gb += float(t.get("ram_used_gb", 0.0))
+            elif "ram_gb" in lbls:
+                try:
+                    node_ram_gb = float(lbls["ram_gb"])
+                    used_ram_gb += float(t.get("ram_used_gb", 0.0))
+                except (ValueError, TypeError):
+                    pass
+            elif t.get("ram_used_gb") and t.get("ram_percent"):
+                pct = float(t["ram_percent"])
+                if pct > 0:
+                    node_ram_gb = float(t["ram_used_gb"]) / (pct / 100.0)
+                    used_ram_gb += float(t["ram_used_gb"])
+
+            total_ram_gb += node_ram_gb
+
             if t.get("cpu_percent") is not None:
-                cpu_samples.append(t["cpu_percent"])
+                cpu_samples.append(float(t["cpu_percent"]))
 
         avg_cpu = round(sum(cpu_samples) / len(cpu_samples), 1) if cpu_samples else 0.0
-        cluster_mem_pct = round((used_mem_mb / total_mem_mb) * 100.0, 1) if total_mem_mb > 0 else 0.0
+        cluster_mem_pct = round((used_ram_gb / total_ram_gb) * 100.0, 1) if total_ram_gb > 0 else 0.0
 
         return {
             "total_nodes": total_nodes,
             "online_nodes": online_nodes,
             "drained_nodes": drained_nodes,
             "offline_nodes": offline_nodes,
+            "total_cluster_cpu_cores": total_cores,
+            "total_cluster_ram_gb": round(total_ram_gb, 1),
             "average_cpu_percent": avg_cpu,
             "cluster_memory_percent": cluster_mem_pct,
-            "cluster_memory_total_mb": total_mem_mb,
-            "cluster_memory_used_mb": used_mem_mb,
+            "cluster_memory_total_mb": int(total_ram_gb * 1024),
+            "cluster_memory_used_mb": int(used_ram_gb * 1024),
         }

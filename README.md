@@ -1,8 +1,9 @@
 # Aegis AI — Autonomous Infrastructure Monitoring & Engineering Platform
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Version: 3.1.0](https://img.shields.io/badge/version-3.1.0-blue.svg)]()
+[![Version: 3.2.0](https://img.shields.io/badge/version-3.2.0-blue.svg)]()
 [![Tests Passing](https://img.shields.io/badge/tests-69%2F69%20passed-brightgreen.svg)]()
+[![Judge Demo: Ready](https://img.shields.io/badge/judge%20demo-ready-brightgreen.svg)]()
 [![Prometheus Ready](https://img.shields.io/badge/prometheus-%2Fmetrics-orange.svg)]()
 [![Security: Hardened](https://img.shields.io/badge/security-hardened-blue.svg)](SECURITY.md)
 [![Agents: Devin Protocol](https://img.shields.io/badge/agents-Devin%20protocol-purple.svg)](AGENTS.md)
@@ -17,6 +18,7 @@ Aegis AI is a production-minded autonomous infrastructure monitoring and enginee
 
 ## Table of Contents
 
+- [🏆 Judge Demonstration Script (3-Minute Live Walkthrough)](#-judge-demonstration-script-3-minute-live-walkthrough)
 - [Architectural Principles & Safety Guardrails](#architectural-principles--safety-guardrails)
 - [Architecture & Phase Breakdown](#architecture--phase-breakdown)
   - [Phase 1: Core Platform & Host Telemetry](#phase-1-core-platform--host-telemetry)
@@ -28,6 +30,103 @@ Aegis AI is a production-minded autonomous infrastructure monitoring and enginee
   - [Aegis 2.0: Distributed Cluster Mesh, Canary Rollbacks & RBAC](#aegis-20-distributed-cluster-mesh-canary-rollbacks--rbac)
   - [Aegis 3.0: Model Optimization Engine & One-Click Cloud Native Deployer](#aegis-30-model-optimization-engine--one-click-cloud-native-deployer)
   - [Aegis 3.1: Live Inference Benchmarking, Dynamic Memory Optimization & Cluster AI Capacity](#aegis-31-live-inference-benchmarking-dynamic-memory-optimization--cluster-ai-capacity)
+  - [Aegis 3.2: Production SRE Console, Mesh Pruning & Zero-Latency Telemetry](#aegis-32-production-sre-console-mesh-pruning--zero-latency-telemetry)
+- [Non-Negotiable Principles](#non-negotiable-principles)
+- [Installation & Production Deployment](#installation--production-deployment)
+- [Client & Server Architecture](#client--server-architecture)
+- [Configuration Reference](#configuration-reference)
+- [Operational Controls & Safety Overrides](#operational-controls--safety-overrides)
+- [API Reference](#api-reference)
+- [Running Automated Tests](#running-automated-tests)
+
+---
+
+## 🏆 Judge Demonstration Script (3-Minute Live Walkthrough)
+
+Use this step-by-step walkthrough during live judging or demonstration sessions. Everything runs locally with zero external dependencies required.
+
+### Pre-Requisites & Quick Verification
+Confirm the Aegis Control Plane is running on port 8000:
+```bash
+curl -s http://127.0.0.1:8000/api/health
+# Expected: {"status":"ok","version":"3.2.0","engine_running":true,...}
+```
+Open **`http://localhost:8000`** in your browser.
+
+---
+
+### Step 1: The Executive Dashboard (30 Seconds)
+1. **Show the 5 Operational Consoles**:
+   - Point out the clean Apple/Linear-grade dark theme (`#090b10` background, high-density SVG sparklines, zero toy emojis).
+   - In the top bar, show the **Live Control Plane Ping** (`2ms`, green status dot) and active operating mode badge.
+2. **Deterministic Safety Controls**:
+   - Point out the **Mode Toggle** (`monitoring` vs `autonomous`).
+   - Click the **`E-STOP`** button: notice it turns red immediately (`E-STOP ON`), instantly blocking all autonomous remediation across the fleet. Click it again to disengage.
+
+---
+
+### Step 2: Multi-Node Cluster Mesh & Remote Client Agent (45 Seconds)
+1. Navigate to the **Cluster Mesh** tab (`tab-cluster` or press `2` on keyboard).
+2. Show the active **Aggregate Fleet Capacity** banner (e.g., `1/1 online · 12 cores · 7.4 GB RAM`).
+3. Show the **Zero-Install Client Command**:
+   ```bash
+   # On any client machine or second terminal:
+   curl -sSL http://127.0.0.1:8000/agent.py | python3 - 127.0.0.1:8000
+   ```
+4. **Live Heartbeats & Cordoning**:
+   - Point out the live streaming telemetry from `client-node-01` (CPU %, RAM %, IP address, last heartbeat).
+   - Demonstrate safety cordoning: Click the **Drain** button next to a node. The node is instantly cordoned with an immutable audit entry preventing new workload scheduling.
+   - For offline/stale nodes, show the **Remove** button that immediately deregisters the node via `DELETE /api/cluster/nodes/{id}`.
+
+---
+
+### Step 3: Hardware-Aware AI Models & 1-Click Cloud Native Deployer (45 Seconds)
+1. Navigate to the **AI Models** tab (`tab-models` or press `3`).
+2. **Instant Hardware Profiling**:
+   - Show how Aegis accurately discovers the physical compute topology (Total VRAM, System RAM, CPU cores, GPU vendor).
+3. **Best vs. Worst Model Fit Tiers**:
+   - Show the **Best Models** card: Aegis computes deterministic fit scores (e.g. `Qwen 2.5 Coder 1.5B` fits 100% in RAM with 3.9 GB headroom, ~22 t/s).
+   - Show the **Worst / Incompatible Models** card: Models that would trigger CUDA OOM or swap thrashing (e.g., `Llama 3.3 70B`) are mathematically flagged red and blocked from destructive auto-launch.
+4. **1-Click Kubernetes & Docker Manifests**:
+   - Click **View YAML**: Aegis renders an instant, production-ready Kubernetes Deployment manifest with GPU limits (`nvidia.com/gpu: 1`), resource requests, and readiness probes.
+   - Click **Optimize Memory**: Evicts idle models and reclaims VRAM dynamically to prevent cascading out-of-memory crashes.
+
+---
+
+### Step 4: Closed-Loop Autonomous Self-Healing with Devin (60 Seconds)
+1. Navigate to the **Incidents & Safety** tab (`tab-incidents` or press `5`).
+2. **Inject a Non-Destructive Test Incident**:
+   Run via terminal or click a test scenario:
+   ```bash
+   curl -X POST http://127.0.0.1:8000/api/demo/override \
+     -H "Content-Type: application/json" \
+     -d '{"kind": "critical", "value_c": 92.0}'
+   ```
+3. **Observe the Autonomous Lifecycle**:
+   - **Detect**: The system incident banner appears instantly in the UI.
+   - **Diagnose**: Click **Diagnose with AI** (or let the autonomous engine tick). Aegis evaluates root causes across 3 tiers (Local Ollama → Cloud Gemini → Deterministic heuristics).
+   - **Plan & Delegate**: Dispatches a structured `RepairTask` to **Devin** with reproduction commands and security constraints.
+   - **Validate in Sandbox**: Clones the repo into an ephemeral sandbox, strips credentials, rejects `.env` changes or directory traversal, and runs the test suite.
+   - **Evidence-Backed PR**: Prepares a GitHub pull request with test exit codes and rollback steps.
+   - **Independent Verification**: Live metric probes independently confirm recovery before resolving the incident.
+4. **Clear Scenario**:
+   ```bash
+   curl -X POST http://127.0.0.1:8000/api/demo/override \
+     -H "Content-Type: application/json" -d '{"kind": "clear"}'
+   ```
+
+---
+
+### Step 5: Complete Interactive Documentation & Prometheus Exposition
+1. Click the **Docs** button in the topbar or open **`http://localhost:8000/documentation`**.
+   - Show the documentation portal with A-Z guides, keyboard shortcut search (`⌘K`), quick-start tabs, architecture diagrams, and REST API tester.
+2. Open **`http://localhost:8000/metrics`**:
+   - Show the production Prometheus `/metrics` endpoint exporting OpenMetrics telemetry ready for Grafana.
+3. Show the **Passing Test Suite**:
+   ```bash
+   PYTHONPATH=. .venv/bin/pytest tests/ -q
+   # 69 passed in ~12 seconds
+   ```
 - [Non-Negotiable Principles](#non-negotiable-principles)
 - [Installation & Quick Start](#installation--quick-start)
 - [Configuration Reference](#configuration-reference)
@@ -229,6 +328,17 @@ Traditional monitoring alerts humans when systems fail. Traditional autonomous a
 - **Closed-Loop Self-Healing Recovery Verification**:
   - Automatically verifies stabilized workloads in `CONTAINED` state via independent live probing, transitioning incidents to `RECOVERY_VERIFIED` without human friction.
 
+### Aegis 3.2: Production SRE Console, Mesh Pruning & Zero-Latency Telemetry
+- **Streamlined 5-Pane SRE Console**:
+  - Consolidated fragmented tabs into 5 high-density operational views: Overview, Cluster Mesh, AI Models, Infrastructure, and Incidents & Safety.
+  - Refined Apple/Linear-grade typography scale and card density with live SVG sparklines.
+- **Resilient Protocol & Cross-Origin API Routing**:
+  - Auto-negotiates `API_BASE` resolution, ensuring instant dashboard telemetry whether loaded via HTTP, reverse proxy, or local `file://` protocol.
+  - Isolated render pipelines preventing minor DOM anomalies from masking control plane connectivity.
+- **Cluster Mesh Deregistration & Real-Time Capacity Aggregation**:
+  - `DELETE /api/cluster/nodes/{id}` enables operator pruning of decommissioned nodes.
+  - Live capacity aggregation calculating actual fleet CPU cores and aggregate RAM across registered worker agents.
+
 ---
 
 ## Non-Negotiable Principles
@@ -425,6 +535,7 @@ resources:
 | `/api/cluster/nodes/register` | `POST` | Register cluster node in distributed mesh |
 | `/api/cluster/nodes/{id}/heartbeat` | `POST` | Record agent telemetry heartbeat |
 | `/api/cluster/nodes/{id}/drain` | `POST` | Cordon and drain cluster node |
+| `/api/cluster/nodes/{id}` | `DELETE` | Remove/deregister node from cluster mesh |
 | `/api/cluster/summary` | `GET` | Aggregated cluster capacity & node counts |
 | `/api/canary/rollouts` | `GET`, `POST` | List or initialize canary deployment rollouts |
 | `/api/canary/rollouts/{id}/step` | `POST` | Advance canary step with automated health check |

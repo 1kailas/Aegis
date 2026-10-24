@@ -4,6 +4,18 @@
  */
 "use strict";
 
+// Resolve API origin: if opened via file:// or without host, default to 127.0.0.1:8000
+const API_BASE = (window.location.protocol === "file:" || !window.location.host) ? "http://127.0.0.1:8000" : "";
+if (API_BASE) {
+  const _origFetch = window.fetch;
+  window.fetch = function(resource, init) {
+    if (typeof resource === "string" && resource.startsWith("/api/")) {
+      resource = API_BASE + resource;
+    }
+    return _origFetch(resource, init);
+  };
+}
+
 const $ = (id) => document.getElementById(id);
 const fmtTime = (iso) => (iso ? new Date(iso).toLocaleTimeString() : "–");
 const fmtRelative = (ts) => {
@@ -124,16 +136,22 @@ async function measurePing() {
     const lat = Math.round(t1 - t0);
     const val = $("pingVal");
     const dot = $("pingDot");
-    if (res.ok) {
-      val.textContent = `${lat}ms`;
-      dot.className = lat > 150 ? "ping-dot warn" : "ping-dot";
-    } else {
-      val.textContent = `${res.status}`;
-      dot.className = "ping-dot crit";
+    if (val && dot) {
+      if (res.ok) {
+        val.textContent = `${lat}ms`;
+        dot.className = lat > 150 ? "ping-dot warn" : "ping-dot";
+      } else {
+        val.textContent = `${res.status}`;
+        dot.className = "ping-dot crit";
+      }
     }
   } catch {
-    $("pingVal").textContent = "offline";
-    $("pingDot").className = "ping-dot crit";
+    const val = $("pingVal");
+    const dot = $("pingDot");
+    if (val && dot) {
+      val.textContent = "offline";
+      dot.className = "ping-dot crit";
+    }
   }
 }
 
@@ -162,16 +180,23 @@ function updateSparkline(svgId, dataPoints, warnThresh = 70, critThresh = 85) {
 
 // ------------------------------------------------------------- Core Overview Polling
 async function pollOverview() {
-  measurePing();
+  await measurePing();
   try {
-    const snap = await (await fetch("/api/overview")).json();
-    renderHealth(snap);
-    renderCards(snap);
-    renderThermal(snap);
-    renderQuickSummaries(snap);
-  } catch {
-    $("pingVal").textContent = "offline";
-    $("pingDot").className = "dot dot-crit";
+    const res = await fetch("/api/overview");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const snap = await res.json();
+    try { renderHealth(snap); } catch (e) { console.warn("renderHealth error:", e); }
+    try { renderCards(snap); } catch (e) { console.warn("renderCards error:", e); }
+    try { renderThermal(snap); } catch (e) { console.warn("renderThermal error:", e); }
+    try { renderQuickSummaries(snap); } catch (e) { console.warn("renderQuickSummaries error:", e); }
+  } catch (err) {
+    console.warn("pollOverview fetch error:", err);
+    const val = $("pingVal");
+    const dot = $("pingDot");
+    if (val && dot) {
+      val.textContent = "offline";
+      dot.className = "ping-dot crit";
+    }
   }
 }
 
@@ -374,8 +399,9 @@ async function refreshCluster() {
       tb.innerHTML = nodes.map(n => {
         const isOnline = n.status === "ONLINE";
         const badgeClass = isOnline ? "ok" : n.status === "DRAINED" ? "info" : "crit";
-        const cpu = n.cpu_percent || 0;
-        const ram = n.ram_percent || 0;
+        const t = n.telemetry_summary || {};
+        const cpu = t.cpu_percent !== undefined ? t.cpu_percent : (n.cpu_percent || 0);
+        const ram = t.ram_percent !== undefined ? t.ram_percent : (n.ram_percent || 0);
         return `
         <tr>
               <td><code class="mono">${n.node_id}</code></td>
@@ -396,7 +422,11 @@ async function refreshCluster() {
               </td>
               <td class="dim">${fmtRelative(n.last_heartbeat_at)}</td>
               <td>
-                ${isOnline ? `<button class="btn xs danger" onclick="drainNode('${n.node_id}')">Drain</button>` : `<span class="text-xs text-muted">Drained</span>`}
+                ${isOnline ? `<button class="btn xs danger" onclick="drainNode('${n.node_id}')">Drain</button>` :
+                  `<div class="flex gap-4 items-center">
+                    <span class="text-xs text-muted">${n.status}</span>
+                    <button class="btn xs" style="color:var(--crit);border-color:var(--border)" onclick="removeNode('${n.node_id}')">Remove</button>
+                  </div>`}
               </td>
             </tr>
         `;
@@ -452,6 +482,18 @@ async function drainNode(nodeId) {
   }
 }
 window.drainNode = drainNode;
+
+async function removeNode(nodeId) {
+  if (!confirm(`Remove node '${nodeId}' from cluster mesh?`)) return;
+  try {
+    await fetch(`/api/cluster/nodes/${nodeId}`, { method: "DELETE" });
+    showToast(`Node ${nodeId} removed`, "ok");
+    refreshCluster();
+  } catch (e) {
+    showToast(`Error removing node: ${e}`, "crit");
+  }
+}
+window.removeNode = removeNode;
 
 async function rollbackCanary(rolloutId) {
   if (!confirm(`Trigger emergency rollback for ${rolloutId}?`)) return;
@@ -1276,7 +1318,8 @@ document.querySelectorAll(".modal-backdrop").forEach(backdrop => {
 });
 
 function initSSE() {
-  const sse = new EventSource("/api/events/stream");
+  const streamUrl = `${API_BASE}/api/events/stream`;
+  const sse = new EventSource(streamUrl);
   sse.onmessage = (e) => {
     try {
       const ev = JSON.parse(e.data);

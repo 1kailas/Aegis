@@ -132,6 +132,7 @@ def sample_quick_telemetry() -> dict[str, Any]:
     cpu_pct = 0.0
     ram_pct = 0.0
     ram_used_gb = 0.0
+    ram_total_gb = 0.0
     swap_pct = 0.0
     disk_pct = 0.0
     load_1m = 0.0
@@ -144,6 +145,7 @@ def sample_quick_telemetry() -> dict[str, Any]:
             cpu_pct = float(psutil.cpu_percent(interval=None))
             ram_pct = float(vm.percent)
             ram_used_gb = round((vm.total - vm.available) / (1024 ** 3), 2)
+            ram_total_gb = round(vm.total / (1024 ** 3), 2)
             swap_pct = float(swap.percent)
         except Exception:
             pass
@@ -162,6 +164,7 @@ def sample_quick_telemetry() -> dict[str, Any]:
                 used_kb = total_kb - avail_kb
                 ram_pct = round((used_kb / total_kb) * 100, 1)
                 ram_used_gb = round(used_kb / (1024 * 1024), 2)
+                ram_total_gb = round(total_kb / (1024 * 1024), 2)
         except Exception:
             pass
 
@@ -198,6 +201,7 @@ def sample_quick_telemetry() -> dict[str, Any]:
         "cpu_percent": float(cpu_pct),
         "ram_percent": float(ram_pct),
         "ram_used_gb": float(ram_used_gb),
+        "ram_total_gb": float(ram_total_gb),
         "swap_percent": float(swap_pct),
         "disk_percent": float(disk_pct),
         "load_1m": float(load_1m),
@@ -285,6 +289,7 @@ class AegisAgent:
         labels = dict(self.labels)
         labels["arch"] = cap.get("arch", "unknown")
         labels["cores"] = str(cap.get("cpu_cores", 1))
+        labels["ram_gb"] = str(cap.get("total_ram_gb", 4.0))
 
         payload = {
             "node_id": self.node_id,

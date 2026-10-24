@@ -655,6 +655,13 @@ def create_app(ctx: AppContext) -> FastAPI:
             raise HTTPException(status_code=404, detail="Node not found in cluster mesh")
         return {"drained": True, "node_id": node_id, "reason": reason}
 
+    @app.delete("/api/cluster/nodes/{node_id}", dependencies=[Depends(_auth_dp(ctx))])
+    def cluster_delete_node(node_id: str) -> dict[str, Any]:
+        ok = ctx.cluster.deregister_node(node_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Node not found in cluster mesh")
+        return {"deleted": True, "node_id": node_id}
+
     # ------------------------------------------------------------- Canary & Rollbacks (v2.0)
     @app.post("/api/canary/rollouts", dependencies=[Depends(_auth_dp(ctx))])
     def canary_init(payload: dict[str, Any]) -> dict[str, Any]:
