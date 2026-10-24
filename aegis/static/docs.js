@@ -1,174 +1,247 @@
-// Aegis AI — Complete Documentation Portal Logic (docs.js)
+// Aegis AI — Enterprise Documentation Portal Logic (docs.js)
 
 document.addEventListener("DOMContentLoaded", () => {
-  setupCopyButtons();
-  setupScrollSpy();
+  initPageRouter();
+  initCodeTabs();
+  initCopyButtons();
   setupSearchEngine();
-  setupKeyboardShortcuts();
+  initMobileMenu();
 });
 
-// ------------------------------------------------------------- 1. Copy Snippets
-function setupCopyButtons() {
-  window.copySnippet = function(text, btnElement) {
-    if (!text) return;
-    navigator.clipboard.writeText(text).then(() => {
-      // Find button if not passed directly
-      let targetBtn = btnElement || (window.event ? window.event.target : null);
-      if (targetBtn) {
-        const originalText = targetBtn.textContent;
-        targetBtn.textContent = "✔ Copied";
-        targetBtn.style.color = "var(--ok)";
-        targetBtn.style.borderColor = "var(--ok)";
-        setTimeout(() => {
-          targetBtn.textContent = originalText;
-          targetBtn.style.color = "";
-          targetBtn.style.borderColor = "";
-        }, 1800);
-      }
-    }).catch(err => {
-      console.error("Clipboard copy failed: ", err);
-    });
-  };
+// ------------------------------------------------------------- 1. Page Router
+function initPageRouter() {
+  const pages = document.querySelectorAll(".doc-page");
+  const sidebarLinks = document.querySelectorAll(".sidebar-link");
+  const footerNavLinks = document.querySelectorAll(".nav-page-btn[data-nav]");
 
-  // Wire all code-block copy buttons
-  document.querySelectorAll(".code-block").forEach(block => {
-    const copyBtn = block.querySelector(".copy-btn");
-    const code = block.querySelector("pre code");
-    if (copyBtn && code && !copyBtn.getAttribute("onclick")) {
+  function showPage(pageId) {
+    if (!pageId) pageId = "overview";
+    pageId = pageId.replace("#", "");
+
+    let targetPage = document.getElementById(`page-${pageId}`);
+    if (!targetPage) {
+      pageId = "overview";
+      targetPage = document.getElementById("page-overview");
+    }
+
+    // Toggle active page
+    pages.forEach(p => p.classList.remove("active-page"));
+    targetPage.classList.add("active-page");
+
+    // Toggle active sidebar link
+    sidebarLinks.forEach(link => {
+      if (link.dataset.page === pageId) {
+        link.classList.add("active");
+      } else {
+        link.classList.remove("active");
+      }
+    });
+
+    // Update URL hash without scroll jump
+    history.replaceState(null, null, `#${pageId}`);
+
+    // Scroll main window to top smoothly
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    // Rebuild Right TOC for this active page
+    buildPageTOC(targetPage);
+
+    // Close mobile menu if open
+    document.getElementById("sidebar")?.classList.remove("mobile-open");
+  }
+
+  // Handle sidebar clicks
+  sidebarLinks.forEach(link => {
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      showPage(link.dataset.page);
+    });
+  });
+
+  // Handle footer pagination clicks
+  footerNavLinks.forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      showPage(btn.dataset.nav);
+    });
+  });
+
+  // Handle browser back/forward or initial hash load
+  window.addEventListener("hashchange", () => {
+    const hash = window.location.hash.replace("#", "");
+    if (hash) showPage(hash);
+  });
+
+  const initialHash = window.location.hash.replace("#", "") || "overview";
+  showPage(initialHash);
+}
+
+// ------------------------------------------------------------- 2. Dynamic TOC Builder
+function buildPageTOC(activePageElement) {
+  const tocNav = document.getElementById("tocNav");
+  if (!tocNav || !activePageElement) return;
+
+  const headings = activePageElement.querySelectorAll("h2, h3");
+  if (!headings.length) {
+    tocNav.innerHTML = `<li style="font-size:0.78rem; color:var(--text-dim); padding:4px 12px;">No sub-sections</li>`;
+    return;
+  }
+
+  tocNav.innerHTML = Array.from(headings).map((h, idx) => {
+    if (!h.id) {
+      h.id = "sec-" + h.textContent.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    }
+    const isSub = h.tagName.toLowerCase() === "h3";
+    return `
+      <li>
+        <a href="#${h.id}" class="toc-link ${isSub ? "sub" : ""}" style="${isSub ? "padding-left:22px; font-size:0.75rem;" : ""}">
+          ${h.textContent}
+        </a>
+      </li>
+    `;
+  }).join("");
+
+  // Setup smooth scroll for TOC links
+  tocNav.querySelectorAll("a").forEach(a => {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      const targetId = a.getAttribute("href").replace("#", "");
+      const targetEl = document.getElementById(targetId);
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
+  });
+}
+
+// ------------------------------------------------------------- 3. Tabbed Code Switcher
+function initCodeTabs() {
+  document.querySelectorAll(".code-tab-card").forEach(card => {
+    const tabBtns = card.querySelectorAll(".code-tabs-header .tab-btn");
+    const panes = card.querySelectorAll(".code-tab-pane");
+    const copyBtn = card.querySelector(".tab-copy-btn");
+
+    tabBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        const targetTab = btn.dataset.tab;
+        tabBtns.forEach(b => b.classList.remove("active"));
+        panes.forEach(p => p.classList.remove("active"));
+
+        btn.classList.add("active");
+        card.querySelector(`#${targetTab}`)?.classList.add("active");
+      });
+    });
+
+    if (copyBtn) {
       copyBtn.addEventListener("click", () => {
-        window.copySnippet(code.textContent, copyBtn);
+        const activePane = card.querySelector(".code-tab-pane.active pre code") || card.querySelector("pre code");
+        if (activePane) {
+          copyText(activePane.textContent, copyBtn);
+        }
       });
     }
   });
 }
 
-// ------------------------------------------------------------- 2. Scroll Spy
-function setupScrollSpy() {
-  const sections = document.querySelectorAll("article section[id]");
-  const tocLinks = document.querySelectorAll("#tocList a");
-  const navLinks = document.querySelectorAll(".docs-sidebar .nav-item a");
-
-  if (!sections.length) return;
-
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        const id = entry.target.getAttribute("id");
-        if (!id) return;
-
-        // Highlight TOC link
-        tocLinks.forEach(link => {
-          if (link.getAttribute("href") === `#${id}`) {
-            link.classList.add("active");
-          } else {
-            link.classList.remove("active");
-          }
-        });
-
-        // Highlight Sidebar link
-        navLinks.forEach(link => {
-          if (link.getAttribute("href") === `#${id}`) {
-            link.classList.add("active");
-          } else {
-            link.classList.remove("active");
-          }
-        });
-      }
-    });
-  }, {
-    rootMargin: "-20% 0px -70% 0px",
-    threshold: 0
+// ------------------------------------------------------------- 4. Copy Snippets
+function copyText(text, btnElement) {
+  if (!text) return;
+  // Strip shell prompts ($) if copying command line
+  const clean = text.replace(/^\$\s+/gm, "");
+  navigator.clipboard.writeText(clean).then(() => {
+    const orig = btnElement.textContent;
+    btnElement.textContent = "Copied!";
+    btnElement.style.color = "var(--status-ok)";
+    btnElement.style.borderColor = "var(--status-ok-border)";
+    setTimeout(() => {
+      btnElement.textContent = orig;
+      btnElement.style.color = "";
+      btnElement.style.borderColor = "";
+    }, 1800);
   });
-
-  sections.forEach(sec => observer.observe(sec));
 }
 
-// ------------------------------------------------------------- 3. Search Engine
+function initCopyButtons() {
+  window.copySnippet = function(text, btnElement) {
+    const target = btnElement || (window.event ? window.event.target : null);
+    copyText(text, target);
+  };
+}
+
+// ------------------------------------------------------------- 5. Search Engine
 function setupSearchEngine() {
+  const searchModal = document.getElementById("searchModal");
+  const searchInput = document.getElementById("searchInput");
+  const searchResults = document.getElementById("searchResults");
+  const searchTrigger = document.getElementById("searchTrigger");
+
+  // Build searchable index from all pages and headings
   const searchIndex = [];
-  const sections = document.querySelectorAll("article section[id]");
+  document.querySelectorAll(".doc-page").forEach(page => {
+    const pageId = page.id.replace("page-", "");
+    const pageTitle = page.querySelector("h1")?.textContent || pageId;
 
-  sections.forEach(sec => {
-    const secId = sec.getAttribute("id");
-    const h1 = sec.querySelector("h1");
-    const h2s = sec.querySelectorAll("h2");
-    const h3s = sec.querySelectorAll("h3");
-    const mainTitle = h1 ? h1.textContent.trim() : (h2s.length ? h2s[0].textContent.trim() : secId);
-
-    // Index section itself
-    const pText = Array.from(sec.querySelectorAll("p, li")).map(p => p.textContent.trim()).join(" ");
+    // Index page lead
+    const lead = page.querySelector(".page-lead")?.textContent || "";
     searchIndex.push({
-      id: secId,
-      title: mainTitle,
-      category: "Section",
-      snippet: pText.substring(0, 160) + "..."
+      pageId: pageId,
+      title: pageTitle,
+      crumb: "Guide",
+      excerpt: lead.substring(0, 160)
     });
 
-    // Index h2 sub-headings
-    h2s.forEach(h => {
-      const title = h.textContent.trim();
+    // Index sections & endpoints
+    page.querySelectorAll("h2, h3, .api-path").forEach(h => {
+      const text = h.textContent.trim();
+      const nextP = h.nextElementSibling?.tagName === "P" ? h.nextElementSibling.textContent : "";
       searchIndex.push({
-        id: secId,
-        title: title,
-        category: mainTitle,
-        snippet: pText.substring(0, 140) + "..."
-      });
-    });
-
-    // Index h3 sub-headings
-    h3s.forEach(h => {
-      const title = h.textContent.trim();
-      searchIndex.push({
-        id: secId,
-        title: title,
-        category: mainTitle,
-        snippet: pText.substring(0, 140) + "..."
+        pageId: pageId,
+        title: text,
+        crumb: pageTitle,
+        excerpt: nextP.substring(0, 140)
       });
     });
   });
 
-  const searchModal = document.getElementById("searchModal");
-  const searchInput = document.getElementById("docsSearchInput");
-  const searchResults = document.getElementById("searchResultsList");
-  const searchTriggerBtn = document.getElementById("searchTriggerBtn");
-
-  function openSearch() {
+  function openModal() {
     searchModal.style.display = "flex";
     searchInput.value = "";
-    renderResults(searchIndex.slice(0, 5));
+    renderResults(searchIndex.slice(0, 6));
     setTimeout(() => searchInput.focus(), 50);
   }
 
-  function closeSearch() {
+  function closeModal() {
     searchModal.style.display = "none";
   }
 
-  searchTriggerBtn?.addEventListener("click", openSearch);
+  searchTrigger?.addEventListener("click", openModal);
 
   searchModal?.addEventListener("click", (e) => {
-    if (e.target === searchModal) closeSearch();
+    if (e.target === searchModal) closeModal();
   });
 
   let selectedIdx = 0;
 
   function renderResults(items) {
     if (!items.length) {
-      searchResults.innerHTML = `<div style="padding:16px 18px; color:var(--muted); font-size:0.86rem;">No documentation matching your query.</div>`;
+      searchResults.innerHTML = `<div style="padding:16px 18px; color:var(--text-dim); font-size:0.85rem;">No matching documentation found.</div>`;
       return;
     }
-
     selectedIdx = 0;
     searchResults.innerHTML = items.map((item, idx) => `
-      <a href="#${item.id}" class="search-result-item ${idx === 0 ? "selected" : ""}" data-idx="${idx}">
-        <div class="search-result-breadcrumb">${item.category}</div>
-        <div class="search-result-title">${item.title}</div>
-        <div class="search-result-snippet">${item.snippet}</div>
+      <a class="search-result-row ${idx === 0 ? "selected" : ""}" data-page="${item.pageId}" data-idx="${idx}">
+        <div class="search-crumb">${item.crumb}</div>
+        <div class="search-title">${item.title}</div>
+        <div class="search-excerpt">${item.excerpt}</div>
       </a>
     `).join("");
 
-    searchResults.querySelectorAll(".search-result-item").forEach(item => {
-      item.addEventListener("click", () => {
-        closeSearch();
+    searchResults.querySelectorAll(".search-result-row").forEach(row => {
+      row.addEventListener("click", () => {
+        const pageId = row.dataset.page;
+        const link = document.querySelector(`.sidebar-link[data-page="${pageId}"]`);
+        if (link) link.click();
+        closeModal();
       });
     });
   }
@@ -176,66 +249,62 @@ function setupSearchEngine() {
   searchInput?.addEventListener("input", (e) => {
     const q = e.target.value.toLowerCase().trim();
     if (!q) {
-      renderResults(searchIndex.slice(0, 5));
+      renderResults(searchIndex.slice(0, 6));
       return;
     }
-
-    const matches = searchIndex.filter(item => {
+    const filtered = searchIndex.filter(item => {
       return item.title.toLowerCase().includes(q) ||
-             item.snippet.toLowerCase().includes(q) ||
-             item.category.toLowerCase().includes(q);
+             item.crumb.toLowerCase().includes(q) ||
+             item.excerpt.toLowerCase().includes(q);
     });
-
-    renderResults(matches.slice(0, 8));
+    renderResults(filtered.slice(0, 8));
   });
 
   searchInput?.addEventListener("keydown", (e) => {
-    const items = searchResults.querySelectorAll(".search-result-item");
-    if (!items.length) return;
+    const rows = searchResults.querySelectorAll(".search-result-row");
+    if (!rows.length) return;
 
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      items[selectedIdx]?.classList.remove("selected");
-      selectedIdx = (selectedIdx + 1) % items.length;
-      items[selectedIdx]?.classList.add("selected");
-      items[selectedIdx]?.scrollIntoView({ block: "nearest" });
+      rows[selectedIdx]?.classList.remove("selected");
+      selectedIdx = (selectedIdx + 1) % rows.length;
+      rows[selectedIdx]?.classList.add("selected");
+      rows[selectedIdx]?.scrollIntoView({ block: "nearest" });
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      items[selectedIdx]?.classList.remove("selected");
-      selectedIdx = (selectedIdx - 1 + items.length) % items.length;
-      items[selectedIdx]?.classList.add("selected");
-      items[selectedIdx]?.scrollIntoView({ block: "nearest" });
+      rows[selectedIdx]?.classList.remove("selected");
+      selectedIdx = (selectedIdx - 1 + rows.length) % rows.length;
+      rows[selectedIdx]?.classList.add("selected");
+      rows[selectedIdx]?.scrollIntoView({ block: "nearest" });
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (items[selectedIdx]) {
-        items[selectedIdx].click();
-        closeSearch();
-      }
+      rows[selectedIdx]?.click();
     } else if (e.key === "Escape") {
-      closeSearch();
+      closeModal();
     }
   });
 
-  window.openDocsSearch = openSearch;
-  window.closeDocsSearch = closeSearch;
-}
-
-// ------------------------------------------------------------- 4. Keyboard Shortcuts
-function setupKeyboardShortcuts() {
+  // Global hotkeys
   window.addEventListener("keydown", (e) => {
-    // ⌘K or Ctrl+K opens search
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
       e.preventDefault();
-      window.openDocsSearch();
+      openModal();
     }
-    // '/' opens search when not in input
     if (e.key === "/" && document.activeElement.tagName !== "INPUT" && document.activeElement.tagName !== "TEXTAREA") {
       e.preventDefault();
-      window.openDocsSearch();
+      openModal();
     }
-    // ESC closes search
     if (e.key === "Escape") {
-      window.closeDocsSearch();
+      closeModal();
     }
+  });
+}
+
+// ------------------------------------------------------------- 6. Mobile Menu
+function initMobileMenu() {
+  const btn = document.getElementById("mobileMenuToggle");
+  const sidebar = document.getElementById("sidebar");
+  btn?.addEventListener("click", () => {
+    sidebar?.classList.toggle("mobile-open");
   });
 }
