@@ -10,7 +10,7 @@
 
 <header class="topbar">
   <div class="brand">
-    <span class="logo">⛨</span> Aegis AI <small id="ver">1.5.0</small>
+    <span class="logo">⛨</span> Aegis AI <small id="ver">2.0.0</small>
   </div>
   <div class="health" id="health">
     <span class="dot dot-warn"></span><span>connecting…</span>
@@ -23,6 +23,7 @@
     <button class="nav-btn" data-tab="ai">AI Infrastructure</button>
     <button class="nav-btn" data-tab="incidents">Incidents</button>
     <button class="nav-btn" data-tab="engineering">Devin &amp; Repair</button>
+    <button class="nav-btn" data-tab="cluster">Cluster Mesh</button>
     <button class="nav-btn" data-tab="policy">Policy &amp; Audit</button>
   </nav>
 
@@ -265,6 +266,30 @@
       <h2>Audit Log &amp; Safety Trail</h2>
       <table class="tbl" id="auditTbl">
         <thead><tr><th>Timestamp</th><th>Actor</th><th>Action</th><th>Subject</th><th>Detail</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- TAB 8: CLUSTER MESH & CANARY (v2.0) -->
+  <section class="tab-content" id="tab-cluster">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Distributed Multi-Node Cluster Mesh <span class="tag">v2.0</span></h2>
+        <button class="btn info" id="refreshClusterBtn">Refresh Cluster</button>
+      </div>
+      <div id="clusterVitals" class="summary-list" style="margin-bottom:12px;"></div>
+      <table class="tbl" id="clusterNodesTbl">
+        <thead><tr><th>Node ID</th><th>Hostname</th><th>IP Address</th><th>Status</th><th>Last Heartbeat</th><th>Actions</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>Automated Canary Rollouts &amp; Closed-Loop Rollbacks</h2>
+      <p class="muted">Aegis progressively observes canaries. SLA breaches or error budget violations immediately trigger automated state revert.</p>
+      <table class="tbl" id="canaryTbl">
+        <thead><tr><th>Rollout ID</th><th>Target</th><th>State</th><th>Step</th><th>Error Rate</th><th>Latency</th><th>Revert Trigger</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>

@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from aegis.cluster.mesh import ClusterMeshManager
 from aegis.collectors.gpu import GpuCollector
 from aegis.collectors.hardware import HardwareCollector, host_identity
 from aegis.collectors.inventory import InventoryCollector
@@ -28,17 +29,20 @@ from aegis.control_plane.policy import PolicyExecutor
 from aegis.control_plane.resource_guardian import ResourceGuardian, ResourcePolicy
 from aegis.control_plane.self_healing import SelfHealingEngine
 from aegis.control_plane.thermal_guardian import ThermalGuardian
+from aegis.engineering.canary_verifier import CanaryVerificationEngine
 from aegis.engineering.devin_adapter import DevinAdapter
 from aegis.engineering.github_adapter import GitHubAdapter
 from aegis.engineering.recovery_verifier import RecoveryVerifier
 from aegis.engineering.workspace import IsolatedWorkspaceManager
 from aegis.intelligence.diagnosis import IncidentDiagnoser
 from aegis.intelligence.forecasting import TelemetryForecaster
+from aegis.notifications.dispatcher import NotificationDispatcher
 from aegis.orchestration.ai_workloads import AIWorkloadMonitor
 from aegis.orchestration.dependency_graph import DependencyGraph
 from aegis.orchestration.docker_adapter import DockerAdapter
 from aegis.orchestration.k8s_adapter import KubernetesAdapter
 from aegis.orchestration.probers import SyntheticProber
+from aegis.security.rbac import RBACManager
 from aegis.db import Database, utcnow
 from aegis.events import EventBus
 from aegis.incidents import IncidentStore
@@ -179,6 +183,10 @@ class AppContext:
         self.forecaster = TelemetryForecaster()
         self.self_healing = SelfHealingEngine(self)
         self.prober = SyntheticProber()
+        self.cluster = ClusterMeshManager(self.db, self.events)
+        self.canary = CanaryVerificationEngine(self.db, self.events)
+        self.dispatcher = NotificationDispatcher(self.db, self.events)
+        self.rbac = RBACManager(self.db)
         self.engine: MonitoringEngine | None = None  # set after construction
 
     # -- guardian bookkeeping ---------------------------------------------

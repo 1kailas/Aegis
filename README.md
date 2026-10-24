@@ -1,8 +1,8 @@
 # Aegis AI — Autonomous Infrastructure Monitoring & Engineering Platform
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Version: 1.5.0](https://img.shields.io/badge/version-1.5.0-blue.svg)]()
-[![Tests Passing](https://img.shields.io/badge/tests-46%2F46%20passed-brightgreen.svg)]()
+[![Version: 2.0.0](https://img.shields.io/badge/version-2.0.0-blue.svg)]()
+[![Tests Passing](https://img.shields.io/badge/tests-51%2F51%20passed-brightgreen.svg)]()
 [![Prometheus Ready](https://img.shields.io/badge/prometheus-%2Fmetrics-orange.svg)]()
 [![Security: Hardened](https://img.shields.io/badge/security-hardened-blue.svg)](SECURITY.md)
 [![Agents: Devin Protocol](https://img.shields.io/badge/agents-Devin%20protocol-purple.svg)](AGENTS.md)
@@ -24,6 +24,8 @@ Aegis AI is a production-minded autonomous infrastructure monitoring and enginee
   - [Phase 3: AI Diagnosis, Devin Integration & Policy Engine](#phase-3-ai-diagnosis-devin-integration--policy-engine)
   - [Phase 4: Isolated Sandboxes, GitHub PRs & Recovery Verification](#phase-4-isolated-sandboxes-github-prs--recovery-verification)
   - [Phase 5: Unified Web Dashboard & Operational Readiness](#phase-5-unified-web-dashboard--operational-readiness)
+  - [Aegis 1.5: Predictive Forecasting, Closed-Loop Autonomy & Observability](#aegis-15-predictive-forecasting-closed-loop-autonomy--observability)
+  - [Aegis 2.0: Distributed Cluster Mesh, Canary Rollbacks & RBAC](#aegis-20-distributed-cluster-mesh-canary-rollbacks--rbac)
 - [Non-Negotiable Principles](#non-negotiable-principles)
 - [Installation & Quick Start](#installation--quick-start)
 - [Configuration Reference](#configuration-reference)
@@ -147,6 +149,42 @@ Traditional monitoring alerts humans when systems fail. Traditional autonomous a
   - **Devin & Repair**: Repair task queue, sandbox test logs, and GitHub pull request links.
   - **Policy & Audit**: Comprehensive audit log of every action, approval status, and security decision.
 - **Server-Sent Events (SSE)**: Real-time event streaming via `/api/events/stream`.
+
+### Aegis 1.5: Predictive Forecasting, Closed-Loop Autonomy & Observability
+- **Predictive Telemetry Forecasting (`forecasting.py`)**:
+  - Online ordinary least squares (OLS) linear regression modeling metric slopes.
+  - Computes Time-To-Exhaustion (TTE) for RAM and disk storage partitions.
+  - Triggers proactive warnings before physical saturation or OOM crashes occur.
+- **Autonomous Closed-Loop Self-Healing Engine (`self_healing.py`)**:
+  - Continuous reconciliation cycle inspecting active incidents.
+  - Automatically queries diagnostic assessments and authorizes allowlisted remediations in `policy_autonomous` mode.
+  - Dispatches non-trivial code/config repairs to Devin.
+  - Dead-letter escalation to `NEEDS_HUMAN_APPROVAL` if repairs do not resolve the incident within max retry limits.
+- **Synthetic Health Prober (`probers.py`)**:
+  - Regular HTTP and TCP canary probes testing external service endpoints.
+  - Validates expected HTTP status codes, latency SLAs, and connection responsiveness.
+- **Prometheus Metrics Exposition (`prometheus.py`)**:
+  - Native Prometheus `/metrics` endpoint compliant with OpenMetrics standard.
+  - Exposes host vitals, guardian statuses, active incident counters, and container states.
+
+### Aegis 2.0: Distributed Cluster Mesh, Canary Rollbacks & RBAC
+- **Distributed Cluster Mesh & Agent Protocol (`mesh.py`)**:
+  - Multi-node management with registration, periodic telemetry heartbeats, and stale node detection.
+  - Real-time fleet capacity aggregation across all cluster nodes (CPU cores, RAM, and GPU capacity).
+  - Node maintenance and draining (`drain_node`) preventing workload dispatch to cordoned machines.
+- **Automated Canary Deployment & Rollback Engine (`canary_verifier.py`)**:
+  - Progressive rollout observation over configurable step counts.
+  - Automated canary verification evaluating error budgets and latency SLAs.
+  - Immediate closed-loop automated rollback (`ROLLING_BACK` -> `ROLLED_BACK`) upon SLA degradation.
+- **Multi-Channel Notification Dispatcher (`dispatcher.py`)**:
+  - Multi-destination alerts routing to Slack, PagerDuty, and generic Webhooks.
+  - Sliding-window alert storm debouncing and deduplication to prevent notification fatigue during cascade failures.
+- **Cryptographic RBAC & Scoped API Keys (`rbac.py`)**:
+  - SHA-256 token hashing with high-entropy prefixes (`aegis_sec_...`).
+  - Strict role hierarchy: `ADMIN`, `OPERATOR`, `READONLY`, and `NODE_AGENT`.
+  - Enforces authorization on all state-changing endpoints, blocking unauthorized writes with HTTP 403 Forbidden.
+- **Cluster Mesh Dashboard Tab**:
+  - Dedicated real-time view of all registered nodes, IP addresses, statuses, and active canary rollouts.
 
 ---
 
@@ -286,6 +324,7 @@ resources:
 |---|---|---|
 | `/` | `GET` | Serves the unified Aegis web dashboard |
 | `/api/health` | `GET` | Health check and subsystem status |
+| `/metrics` | `GET` | Prometheus / OpenMetrics scrape format |
 | `/api/system/snapshot` | `GET` | Latest host, container, and AI infrastructure telemetry |
 | `/api/telemetry/metrics` | `GET` | Historical metric series with aggregation |
 | `/api/incidents` | `GET`, `POST` | List and query incidents |
@@ -298,6 +337,16 @@ resources:
 | `/api/remediation/authorize`| `POST` | Evaluate action against safety policy engine |
 | `/api/policy/emergency_stop`| `POST` | Engage or disengage global emergency stop |
 | `/api/policy/mode` | `POST` | Toggle autonomous or operator-approval mode |
+| `/api/cluster/nodes/register` | `POST` | Register cluster node in distributed mesh |
+| `/api/cluster/nodes/{id}/heartbeat` | `POST` | Record agent telemetry heartbeat |
+| `/api/cluster/nodes/{id}/drain` | `POST` | Cordon and drain cluster node |
+| `/api/cluster/summary` | `GET` | Aggregated cluster capacity & node counts |
+| `/api/canary/rollouts` | `GET`, `POST` | List or initialize canary deployment rollouts |
+| `/api/canary/rollouts/{id}/step` | `POST` | Advance canary step with automated health check |
+| `/api/canary/rollouts/{id}/rollback` | `POST` | Trigger automated canary rollback |
+| `/api/notifications/channels` | `GET`, `POST` | Configure Slack / PagerDuty / webhook channels |
+| `/api/notifications/dispatch` | `POST` | Dispatch alert with storm debouncing |
+| `/api/security/keys` | `GET`, `POST` | Generate and list cryptographically hashed RBAC keys |
 | `/api/audit` | `GET` | Query immutable audit logs |
 | `/api/events/stream` | `GET` | SSE real-time stream of all platform events |
 
@@ -305,7 +354,7 @@ resources:
 
 ## Running Automated Tests
 
-Aegis includes an exhaustive automated test suite covering all 5 implementation phases.
+Aegis includes an exhaustive automated test suite covering all 5 implementation phases plus releases v1.5 and v2.0.
 
 ```bash
 # Run the full test suite
@@ -319,5 +368,6 @@ PYTHONPATH=. .venv/bin/pytest tests/ -v
 - **`tests/test_phase4.py` (7 tests)**: Isolated sandbox clones, patch scope enforcement (`.env` and path traversal rejection), environment variable sanitization, GitHub PR evidence generation, independent recovery verification.
 - **`tests/test_phase5.py` (4 tests)**: End-to-end autonomous lifecycle simulation (Detect → Diagnose → Plan → Authorize → Validate → PR → Verify Recovery), injection security hardening, operator approval mode enforcement, target-aware live probe verification, and static dashboard & OpenAPI delivery.
 - **`tests/test_v15.py` (5 tests)**: Predictive telemetry forecasting (OLS linear regression & TTE calculations), closed-loop autonomous self-healing engine (triage, auto-remediation, and dead-letter escalation), synthetic HTTP/TCP probers, Prometheus metrics exposition line protocol, and v1.5 API endpoints.
+- **`tests/test_v20.py` (5 tests)**: Distributed cluster mesh node lifecycle and draining, automated canary verification and closed-loop rollbacks, multi-channel webhook alert storm debouncing, cryptographic RBAC token generation & permission enforcement, and v2.0 API routes.
 
-**Result: 46 passed in 7.4 seconds.**
+**Result: 51 passed in 7.5 seconds.**

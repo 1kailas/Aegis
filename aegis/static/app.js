@@ -30,6 +30,7 @@ document.querySelectorAll(".nav-btn").forEach(btn => {
     if (btn.dataset.tab === "ai") refreshAI();
     if (btn.dataset.tab === "incidents") refreshIncidents();
     if (btn.dataset.tab === "engineering") refreshDevin();
+    if (btn.dataset.tab === "cluster") refreshCluster();
     if (btn.dataset.tab === "policy") refreshAudit();
   });
 });
@@ -569,6 +570,55 @@ function appendEvent(ev) {
   c.prepend(d);
   if (c.children.length > 50) c.lastChild.remove();
 }
+
+// ------------------------------------------------------------- Cluster & Canary (v2.0)
+async function refreshCluster() {
+  try {
+    const summary = await (await fetch("/api/cluster/summary")).json();
+    $("clusterVitals").innerHTML = `
+      <div class="summary-item">
+        <div class="title">Cluster Mesh Aggregate Capacity</div>
+        <div>Total Nodes: <strong>${summary.total_nodes}</strong> (Online: <strong>${summary.online_nodes}</strong>, Drained: <strong>${summary.drained_nodes}</strong>, Offline: <strong>${summary.offline_nodes}</strong>)</div>
+        <div style="margin-top:4px;">Average Cluster CPU: <strong>${summary.average_cpu_percent}%</strong> | Cluster Memory: <strong>${summary.cluster_memory_percent}%</strong> (${summary.cluster_memory_used_mb}MB / ${summary.cluster_memory_total_mb}MB)</div>
+      </div>
+    `;
+
+    const nodes = await (await fetch("/api/cluster/nodes")).json();
+    $("clusterNodesTbl").querySelector("tbody").innerHTML = nodes.map(n => {
+      const statusClass = n.status === "ONLINE" ? "chip VALID" : n.status === "DRAINED" ? "chip SIMULATED_OVERRIDE" : "chip ERROR";
+      return `<tr>
+        <td><code>${n.node_id}</code></td>
+        <td><strong>${n.hostname}</strong></td>
+        <td>${n.ip_address || "–"}</td>
+        <td><span class="${statusClass}">${n.status}</span></td>
+        <td>${fmtTime(new Date(n.last_heartbeat_at).getTime())}</td>
+        <td>${n.status !== "DRAINED" ? `<button class="btn danger" onclick="drainNode('${n.node_id}')">Drain</button>` : '<span class="muted">Drained</span>'}</td>
+      </tr>`;
+    }).join("");
+
+    const rollouts = await (await fetch("/api/canary/rollouts")).json();
+    $("canaryTbl").querySelector("tbody").innerHTML = rollouts.map(r => {
+      const stateClass = r.state === "PROMOTED" ? "chip VALID" : r.state === "ROLLED_BACK" ? "chip ERROR" : "chip STALE";
+      return `<tr>
+        <td><code>${r.rollout_id}</code></td>
+        <td><strong>${r.target}</strong></td>
+        <td><span class="${stateClass}">${r.state}</span></td>
+        <td>${r.current_step}/${r.total_steps}</td>
+        <td>${(r.error_rate * 100).toFixed(1)}%</td>
+        <td>${r.latency_ms.toFixed(0)} ms</td>
+        <td>${r.revert_trigger || "–"}</td>
+      </tr>`;
+    }).join("");
+  } catch {}
+}
+
+window.drainNode = async (nodeId) => {
+  await fetch(`/api/cluster/nodes/${nodeId}/drain`, { method: "POST", headers: { "Content-Type": "application/json" } });
+  refreshCluster();
+};
+
+const rcb = $("refreshClusterBtn");
+if (rcb) rcb.addEventListener("click", refreshCluster);
 
 // ------------------------------------------------------------- Startup
 pollOverview();

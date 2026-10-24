@@ -225,6 +225,13 @@ class MonitoringEngine(threading.Thread):
             except Exception as e:
                 _LOG.debug("Self-healing or synthetic probe tick note: %s", e)
 
+        # Cluster Mesh Health & Stale Node Detection (v2.0)
+        if self._tick_count % 4 == 0:
+            try:
+                ctx.cluster.evaluate_cluster_health()
+            except Exception as e:
+                _LOG.debug("Cluster mesh health tick note: %s", e)
+
         self._apply_policy(state, simulated, changed)
         self._maybe_prune()
 

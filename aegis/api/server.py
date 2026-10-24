@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import secrets
 import time
 from pathlib import Path
 from typing import Any, AsyncIterator
@@ -65,6 +66,16 @@ class OverrideRequest(BaseModel):
 
 def _guard_state_changer(ctx: AppContext,
                          authorization: str | None) -> None:
+    # 1. RBAC Token Verification
+    if authorization and "aegis_sec_" in authorization:
+        key_rec = ctx.rbac.authenticate_token(authorization)
+        if not key_rec:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked RBAC token")
+        if key_rec.role == "READONLY":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="READONLY token cannot execute state changes")
+        return
+
+    # 2. Config static bearer token verification
     token = ctx.config.server.api_token
     if not token:
         return  # local development binding only
@@ -560,6 +571,122 @@ def create_app(ctx: AppContext) -> FastAPI:
         )
         ctx.prober.add_target(target)
         return {"added": target.name, "target": target.__dict__}
+
+    # ------------------------------------------------------------- Cluster Mesh (v2.0)
+    @app.post("/api/cluster/nodes/register", dependencies=[Depends(_auth_dp(ctx))])
+    def cluster_register_node(payload: dict[str, Any]) -> dict[str, Any]:
+        node_id = payload.get("node_id") or f"node-{secrets.token_hex(4)}"
+        hostname = payload.get("hostname", "unknown-host")
+        ip = payload.get("ip_address")
+        labels = payload.get("labels", {})
+        node = ctx.cluster.register_node(node_id, hostname, ip, labels)
+        return node.as_dict()
+
+    @app.post("/api/cluster/nodes/{node_id}/heartbeat", dependencies=[Depends(_auth_dp(ctx))])
+    def cluster_node_heartbeat(node_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        telemetry = payload.get("telemetry_summary", {})
+        ok = ctx.cluster.record_heartbeat(node_id, telemetry)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Node not registered in cluster mesh")
+        return {"heartbeat_recorded": True, "node_id": node_id}
+
+    @app.get("/api/cluster/nodes")
+    def cluster_list_nodes() -> list[dict[str, Any]]:
+        ctx.cluster.evaluate_cluster_health()
+        return ctx.cluster.list_nodes()
+
+    @app.get("/api/cluster/summary")
+    def cluster_summary() -> dict[str, Any]:
+        ctx.cluster.evaluate_cluster_health()
+        return ctx.cluster.cluster_summary()
+
+    @app.post("/api/cluster/nodes/{node_id}/drain", dependencies=[Depends(_auth_dp(ctx))])
+    def cluster_drain_node(node_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        reason = (payload or {}).get("reason", "Operator requested drain")
+        ok = ctx.cluster.drain_node(node_id, reason)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Node not found in cluster mesh")
+        return {"drained": True, "node_id": node_id, "reason": reason}
+
+    # ------------------------------------------------------------- Canary & Rollbacks (v2.0)
+    @app.post("/api/canary/rollouts", dependencies=[Depends(_auth_dp(ctx))])
+    def canary_init(payload: dict[str, Any]) -> dict[str, Any]:
+        target = payload.get("target")
+        if not target:
+            raise HTTPException(status_code=422, detail="target required")
+        steps = int(payload.get("total_steps", 3))
+        record = ctx.canary.init_rollout(target, total_steps=steps)
+        return record.as_dict()
+
+    @app.post("/api/canary/rollouts/{rollout_id}/evaluate", dependencies=[Depends(_auth_dp(ctx))])
+    def canary_evaluate(rollout_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        err_rate = float(payload.get("error_rate", 0.0))
+        lat_ms = float(payload.get("latency_ms", 50.0))
+
+        # Optional simulated rollback callback
+        def rollback_action():
+            ctx.events.emit("canary", f"Rollback executed for {rollout_id}", "warning")
+            return True
+
+        record = ctx.canary.evaluate_step(
+            rollout_id=rollout_id,
+            live_error_rate=err_rate,
+            live_latency_ms=lat_ms,
+            rollback_fn=rollback_action,
+        )
+        return record.as_dict()
+
+    @app.get("/api/canary/rollouts")
+    def canary_list() -> list[dict[str, Any]]:
+        return ctx.canary.list_rollouts()
+
+    # ------------------------------------------------------------- Notifications & Webhooks (v2.0)
+    @app.get("/api/notifications/channels")
+    def list_notification_channels() -> list[dict[str, Any]]:
+        return ctx.dispatcher.list_channels()
+
+    @app.post("/api/notifications/channels", dependencies=[Depends(_auth_dp(ctx))])
+    def add_notification_channel(payload: dict[str, Any]) -> dict[str, Any]:
+        name = payload.get("name")
+        url = payload.get("webhook_url")
+        ctype = payload.get("channel_type", "webhook")
+        min_sev = payload.get("min_severity", "warning")
+        if not name or not url:
+            raise HTTPException(status_code=422, detail="name and webhook_url required")
+        chan = ctx.dispatcher.add_channel(name, ctype, url, min_sev)
+        return chan.as_dict()
+
+    @app.post("/api/notifications/test", dependencies=[Depends(_auth_dp(ctx))])
+    def test_notification_alert(payload: dict[str, Any]) -> dict[str, Any]:
+        title = payload.get("title", "Aegis AI Test Alert")
+        msg = payload.get("message", "Test alert notification from Aegis 2.0")
+        sev = payload.get("severity", "warning")
+        return ctx.dispatcher.dispatch_alert(title, msg, sev)
+
+    # ------------------------------------------------------------- RBAC & Security (v2.0)
+    @app.get("/api/security/keys", dependencies=[Depends(_auth_dp(ctx))])
+    def list_api_keys() -> list[dict[str, Any]]:
+        return ctx.rbac.list_keys()
+
+    @app.post("/api/security/keys", dependencies=[Depends(_auth_dp(ctx))])
+    def create_api_key(payload: dict[str, Any]) -> dict[str, Any]:
+        name = payload.get("name")
+        role = payload.get("role", "OPERATOR")
+        scopes = payload.get("scopes")
+        if not name:
+            raise HTTPException(status_code=422, detail="Key name required")
+        try:
+            raw_token, record = ctx.rbac.create_api_key(name, role=role, custom_scopes=scopes)
+            return {
+                "token": raw_token,
+                "key_id": record.key_id,
+                "name": record.name,
+                "role": record.role,
+                "scopes": record.scopes,
+                "note": "Save this token now; it is cryptographically hashed and cannot be retrieved again."
+            }
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
 
     # ------------------------------------------------------------ policy & demo
     @app.post("/api/policy/mode", dependencies=[Depends(_auth_dp(ctx))])
