@@ -121,10 +121,18 @@ class SelfHealingEngine:
                     if ctx.flags.mode == "policy_autonomous" and not ctx.flags.emergency_stop:
                         actions_to_try = list(diag.recommended_actions)
                         cat_lower = inc.get("category", "").lower()
-                        if "thermal" in cat_lower:
-                            actions_to_try.append({"action": "set_backpressure", "target": "inference_queue", "reason": "Deterministic thermal safety backpressure"})
-                        elif "oom" in cat_lower or "resource" in cat_lower:
-                            actions_to_try.append({"action": "trim_cache", "target": "host_resources", "reason": "Deterministic resource memory trim"})
+
+                        # Inject hardware scaling & safety actions if hardware pressure detected
+                        if diag.model_role == "hardware" or "thermal" in cat_lower or "resource" in cat_lower or "saturation" in cat_lower:
+                            actions_to_try.append({
+                                "action": "scale_instances",
+                                "target": inc.get("target") or "workload_cluster",
+                                "reason": "Hardware model auto-scaling instances to relieve compute saturation",
+                            })
+                            if "thermal" in cat_lower:
+                                actions_to_try.append({"action": "set_backpressure", "target": "inference_queue", "reason": "Deterministic thermal safety backpressure"})
+                            else:
+                                actions_to_try.append({"action": "trim_cache", "target": "host_resources", "reason": "Deterministic resource memory trim"})
 
                         for act_proposal in actions_to_try:
                             action_name = act_proposal.get("action", "")
@@ -134,23 +142,35 @@ class SelfHealingEngine:
                             attempted += 1
                             self._incident_attempts[iid] = attempts + 1
 
+                            executor_fn = None
+                            if action_name in ("scale_instances", "scale_replicas") and hasattr(ctx, "deployer") and ctx.deployer:
+                                def _make_scale(t: str):
+                                    return lambda: bool(ctx.deployer.scale_instances(target=t).get("success", False))
+                                executor_fn = _make_scale(target)
+                            elif action_name == "restart_container" and hasattr(ctx, "docker") and ctx.docker:
+                                def _make_restart(t: str):
+                                    return lambda: bool(ctx.docker.restart_container(t))
+                                executor_fn = _make_restart(target)
+
                             # Authorize action
                             auth_res = ctx.remediation.authorize_and_execute(
                                 action=ctx.remediation.evaluate_proposal(action_name, target, reason),
                                 mode="policy_autonomous",
                                 emergency_stop=ctx.flags.emergency_stop,
+                                executor_fn=executor_fn,
                             )
 
                             if auth_res.get("authorized") and auth_res.get("result") in ("VERIFIED", "SUCCESS"):
                                 succeeded += 1
+                                model_tag = "Hardware Model" if diag.model_role == "hardware" else "Autonomous Guardian"
                                 ctx.incidents.transition(
                                     iid, "CONTAINED", "self_healing",
-                                    note=f"Remediation '{action_name}' executed autonomously on {target}"
+                                    note=f"{model_tag}: Remediation '{action_name}' executed autonomously on {target}"
                                 )
                                 break
 
-                    # 3. Code/Config Repair Delegation (Devin)
-                    if diag.is_code_or_config_issue:
+                    # 3. Code/Config Repair Delegation (Devin via Software Model)
+                    if diag.model_role == "software" and diag.is_code_or_config_issue:
                         task = ctx.devin.create_repair_task(
                             incident=inc,
                             sanitized_logs=inc.get("summary", ""),
@@ -158,14 +178,15 @@ class SelfHealingEngine:
                         devin_created += 1
                         ctx.incidents.transition(
                             iid, "REPAIRING", "self_healing",
-                            note=f"Delegated to Devin engineering task {task.task_id}"
+                            note=f"Software Model ({diag.model_name}) delegated to Devin task {task.task_id}"
                         )
                         ctx.events.emit(
                             "self_healing",
-                            f"Created Devin repair task {task.task_id} for incident {iid}",
+                            f"Software Model delegated Devin repair task {task.task_id} for incident {iid}",
                             "info",
                             task_id=task.task_id,
                             incident_id=iid,
+                            model_role="software",
                         )
 
                 except Exception as e:

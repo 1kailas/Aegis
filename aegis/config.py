@@ -40,6 +40,8 @@ class MonitoringConfig(BaseModel):
 class ModelsConfig(BaseModel):
     investigator: str = "qwen2.5:1.5b"
     repairer: str = "qwen2.5-coder:1.5b"
+    software_model: str = "gemini-2.5-flash"
+    hardware_model: str = "qwen2.5:1.5b"
     ollama_url: str = "http://127.0.0.1:11434"
     inference_timeout_s: float = 120.0
     gemini_model: str = "gemini-2.5-flash"
@@ -204,9 +206,13 @@ def load_config(
     if env_devin_url:
         app.devin_api_url = env_devin_url
     app.github_token = _secret_from_env("GITHUB_TOKEN")
-    env_model = _secret_from_env("GEMINI_MODEL")
+    env_model = _secret_from_env("GEMINI_MODEL") or _secret_from_env("SOFTWARE_MODEL")
     if env_model:
         app.models.gemini_model = env_model
+        app.models.software_model = env_model
+    env_hard = _secret_from_env("HARDWARE_MODEL")
+    if env_hard:
+        app.models.hardware_model = env_hard
     env_max_req = _secret_from_env("GEMINI_MAX_REQ_PER_HOUR")
     if env_max_req:
         try:

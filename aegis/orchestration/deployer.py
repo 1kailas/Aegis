@@ -471,3 +471,82 @@ volumes:
         )
         self.events.emit("deployment", f"Deployment '{deployment_id}' stopped", "warning")
         return True
+
+    def scale_instances(
+        self,
+        target: str = "ai-inference-cluster",
+        replicas: int | None = None,
+        delta: int = 1,
+    ) -> dict[str, Any]:
+        """Autonomously scales instance replica count up or down for a workload or cluster."""
+        now = utcnow()
+        # Find active deployment matching target or most recent
+        rows = self.db.query(
+            "SELECT * FROM model_deployments WHERE status IN ('RUNNING', 'CONFIGURED') ORDER BY id DESC LIMIT 1"
+        )
+        current_replicas = 1
+        deployment_id = None
+        model_name = "workload-cluster"
+        runtime = "k8s"
+
+        if rows:
+            dep = dict(rows[0])
+            deployment_id = dep["deployment_id"]
+            model_name = dep["model_name"]
+            runtime = dep["runtime"]
+            m = re.search(r"replicas:\s*(\d+)", dep.get("manifest", ""))
+            if m:
+                current_replicas = int(m.group(1))
+
+        if replicas is not None:
+            new_replicas = max(1, min(10, replicas))
+        else:
+            new_replicas = max(1, min(10, current_replicas + delta))
+
+        # Generate updated manifest with scaled instances
+        if runtime == "docker":
+            manifest = self.generate_docker_compose(model_name=model_name, replicas=new_replicas)
+        else:
+            manifest = self.generate_k8s_manifest(model_name=model_name, replicas=new_replicas)
+
+        if deployment_id:
+            self.db.execute(
+                "UPDATE model_deployments SET manifest=?, updated_at=? WHERE deployment_id=?",
+                (manifest, now, deployment_id),
+            )
+        else:
+            deployment_id = f"DEP-SCALE-{int(time.time())}-{clean_name(target)}"
+            record = DeploymentRecord(
+                deployment_id=deployment_id,
+                model_name=model_name,
+                runtime=runtime,
+                status=DeploymentStatus.RUNNING,
+                target=target,
+                port=11434,
+                manifest=manifest,
+                created_at=now,
+                updated_at=now,
+            )
+            self._persist_record(record)
+
+        self.events.emit(
+            "scaling",
+            f"Hardware Model auto-scaled instances for '{target}': {current_replicas} -> {new_replicas} replicas",
+            "info",
+            target=target,
+            previous_replicas=current_replicas,
+            new_replicas=new_replicas,
+            deployment_id=deployment_id,
+        )
+
+        return {
+            "success": True,
+            "target": target,
+            "deployment_id": deployment_id,
+            "previous_replicas": current_replicas,
+            "new_replicas": new_replicas,
+            "runtime": runtime,
+            "status": "SCALED",
+            "message": f"Successfully scaled {target} from {current_replicas} to {new_replicas} instances",
+            "timestamp": now,
+        }

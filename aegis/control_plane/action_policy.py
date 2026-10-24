@@ -65,6 +65,8 @@ AUTONOMOUS_ALLOWLIST = {
     "trim_cache",
     "create_or_update_incident",
     "notify",
+    "scale_instances",
+    "evict_idle_model",
 }
 
 

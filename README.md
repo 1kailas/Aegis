@@ -2,9 +2,10 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Version: 3.2.0](https://img.shields.io/badge/version-3.2.0-blue.svg)]()
-[![Tests Passing](https://img.shields.io/badge/tests-80%2F80%20passed-brightgreen.svg)]()
+[![Tests Passing](https://img.shields.io/badge/tests-88%2F88%20passed-brightgreen.svg)]()
 [![Devin Hacks: Ready](https://img.shields.io/badge/Devin%20Hacks-Hackathon%20Ready-purple.svg)]()
 [![Gemini Tier 2: Enabled](https://img.shields.io/badge/Gemini%202.5%20Flash-Active-blue.svg)]()
+[![Dual-Model: Active](https://img.shields.io/badge/Dual--Model-Software%20%2B%20Hardware-indigo.svg)]()
 [![Security: Hardened](https://img.shields.io/badge/security-hardened-blue.svg)](SECURITY.md)
 [![Agents: Devin Protocol](https://img.shields.io/badge/agents-Devin%20protocol-purple.svg)](AGENTS.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -12,7 +13,11 @@
 
 > **"Aegis monitors and orchestrates. Deterministic controllers enforce safety. AI investigates and engineers fixes. Independent verification determines whether the fix actually worked."**
 
-Aegis AI is an autonomous on-call engineering control plane designed for production websites, microservices, and AI inference runtimes. Prepared for the **Devin Hacks Kochi Hackathon** (tracks: *Kill the Busywork* / *Make the Invisible Visible*), Aegis continuously probes live services, correlates anomalies, performs multi-tier AI diagnosis (Local Ollama → Google Gemini 2.5 Flash → Deterministic Expert Rules), delegates code repairs to **Devin**, and independently verifies live service recovery to close the loop.
+Aegis AI is an autonomous on-call engineering control plane designed for production websites, microservices, and AI inference runtimes. Prepared for the **Devin Hacks Kochi Hackathon** (tracks: *Kill the Busywork* / *Make the Invisible Visible*), Aegis features a specialized **Dual-Model Division of Labor**:
+- 🧠 **Software Intelligence Model (Gemini 2.5 Flash)**: Observes website 5xx outages, application exceptions, and crash loops. Understands technical root cause, affected files, and reproduction steps, synthesizing repair briefs and triggering Pull Requests via **Devin**.
+- ⚡ **Hardware & Scaling Intelligence Model (Local Infra Model / Qwen / Guardian)**: Monitors compute load, CPU/VRAM/RAM saturation, and physical thermals. Autonomously executes instance auto-scaling (scaling container/pod replicas across cluster nodes), idle model weight eviction, and thermal backpressure.
+
+All actions remain governed by Aegis's dual-plane architecture: AI models only advise; deterministic guardians authorize and enforce safety invariants.
 
 ---
 
@@ -33,9 +38,10 @@ This launches the Aegis Control Plane (`http://localhost:8000`), the demo target
 | :--- | :--- | :--- |
 | **00:00 – 00:15** | **Connect a Production Target** | In Overview, see **"Checkout Payment Service"** monitored at `http://127.0.0.1:5050/health`. Live status is **HTTP 200 OK**, latency ~12ms. Show that Aegis works on any standard website or web API, not just local Docker containers. |
 | **00:15 – 00:30** | **Simulate Production Outage** | Click **"Simulate 500 Outage"** (or run `bash demo-target/trigger_bug.sh`). The target health endpoint immediately breaks with HTTP 500 (`NullPointer in checkout.py`). Within 4 seconds, Aegis detects 2 consecutive failures and automatically creates a Critical Incident. |
-| **00:30 – 00:50** | **Multi-Tier Gemini Diagnosis** | Aegis executes Tier 2 diagnosis via **Google Gemini** (model `gemini-2.5-flash` / `gemini-3.5-flash`), returning structured JSON with `{root_cause, confidence: 92%, affected_files: ["checkout.py"], reproduction_steps, acceptance_criteria}`. The incident timeline badges the diagnosis tier used. |
-| **00:50 – 01:10** | **Devin Repair Delegation & PR** | Aegis creates a bounded `RepairTask` for Devin containing reproduction steps, acceptance criteria, and security guardrails (no credentials access, no arbitrary host shell execution). If authenticated, Devin opens a real PR link; if unauthenticated, Aegis honestly reports `AWAITING_DEVIN_API_KEY` without fabricating results. |
-| **01:10 – 01:25** | **Closing the Loop (Verified Recovery)** | Click **"Verify & Close Loop"**. Aegis applies the repair to the target service and runs an independent HTTP health probe. Once the live probe returns **HTTP 200 OK**, the incident transitions to **`RECOVERY_VERIFIED`** and displays the headline **MTTR Metric** (e.g., `Time to Verified Recovery: 38.4s`). |
+| **00:30 – 00:45** | **Multi-Tier Gemini Diagnosis** | Aegis executes Tier 2 diagnosis via **Google Gemini** (model `gemini-2.5-flash` / `gemini-3.5-flash`), returning structured JSON with `{root_cause, confidence: 92%, affected_files: ["checkout.py"], reproduction_steps, acceptance_criteria}`. The incident timeline badges the Software Model. |
+| **00:45 – 01:00** | **Devin Repair Delegation & PR** | Aegis creates a bounded `RepairTask` for Devin containing reproduction steps, acceptance criteria, and security guardrails (no credentials access, no arbitrary host shell execution). If authenticated, Devin opens a real PR link; if unauthenticated, Aegis honestly reports `AWAITING_DEVIN_API_KEY` without fabricating results. |
+| **01:00 – 01:15** | **Hardware Model Auto-Scaling Demo** | Click **"⚡ Scale Instances"** (or trigger `POST /api/hardware/scale-instances`). The **Hardware Intelligence Model** detects compute saturation and autonomously scales workload replicas (1 -> 2 instances), verified across cluster nodes. |
+| **01:15 – 01:25** | **Closing the Loop (Verified Recovery)** | Click **"Verify & Close Loop"**. Aegis applies the repair to the target service and runs an independent HTTP health probe. Once the live probe returns **HTTP 200 OK**, the incident transitions to **`RECOVERY_VERIFIED`** and displays the headline **MTTR Metric** (e.g., `Time to Verified Recovery: 38.4s`). |
 | **01:25 – 01:30** | **Deterministic Safety Demonstration** | Click **"Safety Test (403)"**. Aegis submits `rm -rf /` through the `ActionPolicyEngine`. The dual-plane guardian immediately blocks execution with a deterministic **HTTP 403 Forbidden**, proving that AI models only advise while deterministic code enforces safety invariants. |
 
 ---

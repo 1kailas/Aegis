@@ -76,6 +76,55 @@
       <button class="btn sm warn" id="btnTriggerTargetBug" title="Simulates a real 500 error in demo target app">Simulate 500 Outage</button>
       <button class="btn sm danger" id="btnTestSafety" title="Submits 'rm -rf /' to verify deterministic 403 rejection">Safety Test (403)</button>
       <button class="btn sm" id="btnSimulateLoad" title="Triggers deterministic VRAM/memory eviction via ResourceGuardian">Simulate Load</button>
+      <button class="btn sm info" id="btnScaleInstances" title="Hardware Model auto-scales instances across cluster nodes to relieve compute saturation">⚡ Scale Instances</button>
+    </div>
+  </div>
+
+  <!-- Dual-Model Division of Labor Showcase -->
+  <div class="panel" style="margin-bottom:16px; background:linear-gradient(135deg, rgba(20,24,35,0.85) 0%, rgba(13,16,24,0.95) 100%); border:1px solid rgba(255,255,255,0.08);">
+    <div style="padding:12px 18px; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px; border-bottom:1px solid rgba(255,255,255,0.05);">
+      <div class="flex items-center gap-10">
+        <span class="badge" style="background:rgba(99,102,241,0.15); color:#818cf8; border:1px solid rgba(99,102,241,0.3); font-weight:700;">DUAL-MODEL ARCHITECTURE</span>
+        <span style="font-size:13px; font-weight:600; color:var(--text-primary);">Specialized Model Division of Labor (Software vs Hardware)</span>
+      </div>
+      <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Dual-Plane Deterministic Safety</div>
+    </div>
+    <div style="padding:14px 18px; display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:16px;">
+      <!-- Software Model -->
+      <div style="background:rgba(15,19,28,0.7); border:1px solid rgba(255,255,255,0.06); border-radius:8px; padding:12px 14px;">
+        <div class="flex items-center justify-between" style="margin-bottom:6px;">
+          <div class="flex items-center gap-8">
+            <span class="status-dot ok" id="softModelDot"></span>
+            <span style="font-weight:600; font-size:13px; color:var(--text-primary);">Software Intelligence</span>
+          </div>
+          <span class="badge" style="background:rgba(56,189,248,0.15); color:#38bdf8; font-size:10px;" id="softModelBadge">Gemini 2.5 Flash</span>
+        </div>
+        <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">
+          Observes code errors, 5xx server outages &amp; unhandled exceptions. Understands root cause and builds repair briefs to trigger Devin PRs.
+        </div>
+        <div class="flex items-center gap-12" style="font-size:11px; color:var(--text-muted);">
+          <span>• Code &amp; Config Analysis</span>
+          <span>• Devin PR Repair Loop</span>
+        </div>
+      </div>
+
+      <!-- Hardware Model -->
+      <div style="background:rgba(15,19,28,0.7); border:1px solid rgba(255,255,255,0.06); border-radius:8px; padding:12px 14px;">
+        <div class="flex items-center justify-between" style="margin-bottom:6px;">
+          <div class="flex items-center gap-8">
+            <span class="status-dot ok" id="hardModelDot"></span>
+            <span style="font-weight:600; font-size:13px; color:var(--text-primary);">Hardware &amp; Scaling Intelligence</span>
+          </div>
+          <span class="badge" style="background:rgba(168,85,247,0.15); color:#c084fc; font-size:10px;" id="hardModelBadge">Local Infra Model</span>
+        </div>
+        <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">
+          Monitors compute load, CPU/VRAM saturation &amp; thermals. Executes autonomous instance auto-scaling, model weight eviction &amp; throttling.
+        </div>
+        <div class="flex items-center gap-12" style="font-size:11px; color:var(--text-muted);">
+          <span>• Multi-Instance Auto-Scaling</span>
+          <span>• Thermal &amp; VRAM Safety</span>
+        </div>
+      </div>
     </div>
   </div>
 

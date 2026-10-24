@@ -149,6 +149,47 @@ def create_app(ctx: AppContext) -> FastAPI:
             "host_id": ctx.identity.host_id,
             "gemini_configured": gemini_cfg,
             "devin_configured": devin_cfg,
+            "dual_models": {
+                "software_model": {
+                    "role": "Software Intelligence (Application, 5xx outages & Devin PRs)",
+                    "name": ctx.config.models.software_model,
+                    "provider": "Gemini Cloud API",
+                    "configured": gemini_cfg,
+                },
+                "hardware_model": {
+                    "role": "Hardware & Scaling Intelligence (Compute Saturation, Auto-scaling & Thermal)",
+                    "name": ctx.config.models.hardware_model,
+                    "provider": "Local Hardware Guardian / Ollama",
+                    "configured": True,
+                },
+            },
+        }
+
+    @app.get("/api/models/dual")
+    def get_dual_models() -> dict[str, Any]:
+        gemini_cfg = bool(ctx.config.gemini_api_key and len(ctx.config.gemini_api_key.strip()) > 8)
+        devin_cfg = bool(
+            (ctx.devin.api_key and len(ctx.devin.api_key.strip()) > 5)
+            or bool(getattr(ctx.devin, "_desktop_cli", None))
+        )
+        return {
+            "software_model": {
+                "role": "Software Intelligence",
+                "name": ctx.config.models.software_model,
+                "provider": "Gemini Cloud API",
+                "configured": gemini_cfg,
+                "description": "Monitors code errors, exceptions, and 5xx outages; synthesizes repair briefs and triggers Devin PRs",
+                "capabilities": ["Code Bug Diagnosis", "5xx Outage Analysis", "Devin PR Generation", "Recovery Verification"],
+            },
+            "hardware_model": {
+                "role": "Hardware & Scaling Intelligence",
+                "name": ctx.config.models.hardware_model,
+                "provider": "Local Hardware Guardian / Ollama",
+                "configured": True,
+                "description": "Monitors compute load, CPU/VRAM saturation, thermal thresholds; executes instance auto-scaling and resource controls",
+                "capabilities": ["Auto-Scale Instances (Replicas)", "VRAM Model Eviction", "Deterministic Cache Trim", "Thermal Backpressure"],
+            },
+            "devin_configured": devin_cfg,
         }
 
     @app.get("/api/overview")
@@ -454,23 +495,98 @@ def create_app(ctx: AppContext) -> FastAPI:
             },
         )
 
-    # ------------------------------------------------------------- Hardware / Resource Demo
+    # ------------------------------------------------------------- Hardware / Resource Demo & Scaling
+    @app.post("/api/hardware/scale-instances")
+    def hardware_scale_instances(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+        target = payload.get("target", "ai-inference-cluster")
+        replicas = payload.get("replicas")
+        delta = int(payload.get("delta", 1))
+
+        res = ctx.deployer.scale_instances(target=target, replicas=replicas, delta=delta)
+        now_ts = utcnow()
+
+        inc = ctx.incidents.create(
+            category="hardware_autoscaling",
+            severity="warning",
+            title=f"Hardware Model: Auto-scaled {target} ({res['previous_replicas']} -> {res['new_replicas']} instances)",
+            summary=f"Hardware Intelligence Model detected compute pressure. Scaled {target} from {res['previous_replicas']} to {res['new_replicas']} instances to distribute load across nodes.",
+            evidence=[{
+                "kind": "hardware_scaling_event",
+                "model_role": "hardware",
+                "model_name": ctx.config.models.hardware_model,
+                "scaling": res,
+                "ts": now_ts,
+            }],
+        )
+        ctx.incidents.transition(
+            inc["id"],
+            "CONTAINED",
+            "hardware_model",
+            note=f"Hardware Model scaled instances from {res['previous_replicas']} to {res['new_replicas']}. Compute saturation relieved.",
+        )
+        ctx.incidents.transition(
+            inc["id"],
+            "RECOVERY_VERIFIED",
+            "hardware_model",
+            note=f"Cluster replica count verified at {res['new_replicas']} instances.",
+        )
+        return {
+            **res,
+            "incident_id": inc["id"],
+            "model_role": "hardware",
+            "model_name": ctx.config.models.hardware_model,
+        }
+
     @app.post("/api/demo/simulate-resource-action")
     def demo_simulate_resource_action(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
         action_type = payload.get("action_type", "evict_idle_model")
-        target = payload.get("target", "ai-inference-vram")
+        target = payload.get("target", "ai-inference-vram" if action_type == "evict_idle_model" else "ai-inference-cluster")
         now_ts = utcnow()
+
+        if action_type == "scale_instances":
+            scaling_res = ctx.deployer.scale_instances(target=target)
+            inc = ctx.incidents.create(
+                category="hardware_resource_pressure",
+                severity="critical",
+                title="Hardware Model: Auto-scaling cluster instances under compute saturation",
+                summary=f"Hardware Intelligence Model detected 96% compute saturation. Auto-scaled instances from {scaling_res['previous_replicas']} -> {scaling_res['new_replicas']} replicas.",
+                evidence=[{
+                    "kind": "hardware_saturation",
+                    "cpu_percent": 95.8,
+                    "action_recommended": "scale_instances",
+                    "scaling": scaling_res,
+                    "model_role": "hardware",
+                    "ts": now_ts,
+                }],
+            )
+            ctx.incidents.transition(
+                inc["id"],
+                "CONTAINED",
+                "hardware_model",
+                note=f"Hardware Model auto-scaled instances to {scaling_res['new_replicas']} replicas to distribute compute load.",
+            )
+            return {
+                "success": True,
+                "incident_id": inc["id"],
+                "action": "scale_instances",
+                "target": target,
+                "scaling": scaling_res,
+                "status": "CONTAINED",
+                "model_role": "hardware",
+                "message": f"Hardware Model auto-scaled {target} from {scaling_res['previous_replicas']} to {scaling_res['new_replicas']} instances.",
+            }
 
         inc = ctx.incidents.create(
             category="hardware_resource_pressure",
             severity="critical",
-            title="ResourceGuardian: Memory & VRAM saturation breach (>95%)",
-            summary="Host VRAM crossed critical threshold (96.4%). ResourceGuardian triggered deterministic model eviction.",
+            title="Hardware Guardian: Memory & VRAM saturation breach (>95%)",
+            summary="Host VRAM crossed critical threshold (96.4%). Hardware Guardian triggered deterministic model eviction.",
             evidence=[{
                 "kind": "resource_breach",
                 "vram_percent": 96.4,
                 "cpu_percent": 92.1,
                 "action_recommended": action_type,
+                "model_role": "hardware",
                 "ts": now_ts,
             }],
         )
@@ -490,11 +606,11 @@ def create_app(ctx: AppContext) -> FastAPI:
             inc["id"],
             "CONTAINED",
             "resource_guardian",
-            note=f"Deterministic action executed: {action_type} on {target}. VRAM freed.",
+            note=f"Deterministic hardware action executed: {action_type} on {target}. VRAM freed.",
         )
         ctx.events.emit(
             "guardian_action",
-            f"ResourceGuardian executed deterministic action '{action_type}' on {target}",
+            f"Hardware Guardian executed deterministic action '{action_type}' on {target}",
             "info",
             incident_id=inc["id"],
             action=action_type,
@@ -507,7 +623,8 @@ def create_app(ctx: AppContext) -> FastAPI:
             "target": target,
             "policy_result": auth,
             "status": "CONTAINED",
-            "message": f"Deterministic action '{action_type}' executed by ResourceGuardian. Logged on incident timeline.",
+            "model_role": "hardware",
+            "message": f"Deterministic action '{action_type}' executed by Hardware Guardian. Logged on incident timeline.",
         }
 
     # -------------------------------------------------------- Remediation Policy Engine

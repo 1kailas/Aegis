@@ -148,6 +148,8 @@ class AppContext:
             local_model=config.models.investigator,
             gemini_api_key=config.gemini_api_key,
             gemini_model=config.models.gemini_model,
+            software_model=config.models.software_model,
+            hardware_model=config.models.hardware_model,
             max_gemini_requests_per_hour=config.models.gemini_max_requests_per_hour,
         )
         self.devin = DevinAdapter(self.db, api_key=config.devin_api_key)

@@ -4,6 +4,38 @@ All notable changes to the **Aegis AI** platform are documented in this file in 
 
 ---
 
+## 2026-10-25T03:50:00+05:30 — Aegis AI v3.2.0: Dual-Model Division of Labor — Software Intelligence (Gemini) & Hardware/Scaling Intelligence
+
+- **Added & Changed:**
+  - **Specialized Dual-Model Division of Labor**:
+    - **Software Intelligence Model (`software_model`: Gemini 2.5 Flash)**:
+      - Specializes in application code, website 5xx outages, exceptions, and crash loops.
+      - Generates structured root cause hypotheses, affected files, reproduction steps, and acceptance criteria.
+      - Automatically builds repair briefs and delegates Pull Request creation to **Devin**.
+    - **Hardware & Infrastructure Intelligence Model (`hardware_model`: Local Infra Model / Qwen / Guardian)**:
+      - Specializes in host compute load, CPU/VRAM/RAM saturation, thermal thresholds, and replica capacity.
+      - Proposes and executes hardware remediation actions: `scale_instances` (multi-replica scaling), `evict_idle_model` (frees GPU VRAM), `trim_cache`, and `set_backpressure`.
+  - **Intelligent Triage & Incident Routing**:
+    - Upgraded `IncidentDiagnoser`: `is_hardware_incident()` automatically classifies anomalies into hardware vs software.
+    - Software incidents route to `diagnose_software()` (Gemini Tier 2 -> Ollama -> Expert rules).
+    - Hardware incidents route to `diagnose_hardware()` (Local hardware model -> Deterministic hardware guardian rules).
+    - Tags every assessment with `model_role="software"` or `model_role="hardware"` and the corresponding model name.
+  - **Autonomous Instance Scaling Execution**:
+    - Implemented `scale_instances()` in `OneClickDeployer` (`aegis/orchestration/deployer.py`): dynamically updates Kubernetes deployments and Docker Compose manifests with scaled replica counts (e.g. 1 -> 2 -> 3 instances) and emits cluster scaling events.
+    - Added `scale_instances` and `evict_idle_model` to `AUTONOMOUS_ALLOWLIST` in `RemediationPolicyEngine`.
+    - Integrated scaling execution into `SelfHealingEngine`: hardware saturation incidents automatically trigger instance scale-out to relieve compute pressure.
+  - **REST Endpoints & Frontend Showcase**:
+    - Added `GET /api/models/dual` reporting full capabilities, roles, and status of both Software and Hardware models.
+    - Added `POST /api/hardware/scale-instances` to trigger autonomous scaling on demand.
+    - Updated `/api/health` to expose `dual_models` status.
+    - Added **Dual-Model Division of Labor** card and live **"⚡ Scale Instances"** toolbar action to the web dashboard (`index.html` & `app.js`).
+    - Upgraded the 6-stage Incident Timeline to dynamically display specialized stages for Software repairs (Devin PR) vs Hardware actions (Auto-Scaling & VRAM eviction).
+  - **Test Suite Expansion**:
+    - Added `tests/test_dual_models.py` with 8 comprehensive unit tests covering configuration, triage routing, scaling execution, safety allowlists, API endpoints, and self-healing.
+    - Total test suite now at **88 passing tests** (100% pass rate).
+
+---
+
 ## 2026-10-25T03:30:00+05:30 — Aegis AI v3.2.0: Devin Hacks Hackathon — Autonomous On-Call SRE & End-to-End Repair Verification
 
 - **Changed:**

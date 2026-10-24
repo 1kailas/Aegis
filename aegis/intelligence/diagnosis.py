@@ -81,6 +81,7 @@ class DiagnosisResult:
     provider: str  # local_ollama | cloud_gemini | deterministic_expert
     model_name: str
     status: str = "ASSESSMENT"
+    model_role: str = "software"  # software | hardware
     root_cause_hypothesis: str = ""
     confidence_score: float = 0.5
     is_code_or_config_issue: bool = False
@@ -107,6 +108,7 @@ class DiagnosisResult:
             "incident_id": self.incident_id,
             "provider": self.provider,
             "model_name": self.model_name,
+            "model_role": self.model_role,
             "status": self.status,
             "root_cause": self.root_cause_hypothesis,
             "root_cause_hypothesis": self.root_cause_hypothesis,
@@ -126,7 +128,15 @@ class DiagnosisResult:
 
 
 class IncidentDiagnoser:
-    """Investigates incidents using multi-tier fallback with cost and safety controls."""
+    """Specialized Dual-Model Incident Diagnosis Engine:
+    1. Software Intelligence Model (Gemini Cloud API):
+       Analyzes application code, 5xx server errors, unhandled exceptions,
+       syntax/logic bugs, crash loops, and synthesizes Devin repair tasks.
+    2. Hardware & Infrastructure Intelligence Model (Local Qwen / Infra Guardian):
+       Analyzes compute load, CPU/VRAM/RAM saturation, thermal limits,
+       and proposes hardware actions (auto-scaling instances, evicting idle models,
+       trimming cache, setting thermal backpressure).
+    """
 
     def __init__(
         self,
@@ -135,40 +145,106 @@ class IncidentDiagnoser:
         gemini_api_key: str | None = None,
         gemini_model: str = "gemini-2.5-flash",
         max_gemini_requests_per_hour: int = 30,
+        software_model: str | None = None,
+        hardware_model: str | None = None,
     ):
         self.ollama_url = ollama_url.rstrip("/")
-        self.local_model = local_model
         self.gemini_api_key = gemini_api_key
-        self.gemini_model = gemini_model
+        self.software_model = software_model or gemini_model
+        self.gemini_model = self.software_model
+        self.hardware_model = hardware_model or local_model
+        self.local_model = self.hardware_model
         self.max_gemini_requests_per_hour = max_gemini_requests_per_hour
         self._gemini_request_timestamps: list[float] = []
+
+    def is_hardware_incident(self, incident: dict[str, Any]) -> bool:
+        """Determines if an incident should route to the Hardware Model vs Software Model."""
+        cat = str(incident.get("category", "")).lower()
+        title = str(incident.get("title", "")).lower()
+        summary = str(incident.get("summary", "")).lower()
+
+        # Software/application categories take software priority
+        if any(c in cat for c in ("target_outage", "website", "http", "crash_loop", "auth_failure", "endpoint_failure")):
+            return False
+        if "container_oom_killed" in cat and "hardware" not in cat:
+            return False
+
+        hw_keywords = (
+            "thermal",
+            "resource_saturation",
+            "hardware_resource_pressure",
+            "capacity_exhaustion",
+            "vram",
+            "cpu_breach",
+            "load_saturation",
+            "hardware",
+            "overheat",
+            "throttling",
+            "compute_pressure",
+            "autoscaling",
+            "resource",
+        )
+        return any(k in cat or k in title or k in summary for k in hw_keywords)
 
     def diagnose(
         self, incident: dict[str, Any], telemetry_context: dict[str, Any] | None = None
     ) -> DiagnosisResult:
-        """Diagnoses an incident, returning an evidence-backed Assessment."""
+        """Routes incident to either the Software Model or Hardware Model."""
+        if self.is_hardware_incident(incident):
+            return self.diagnose_hardware(incident, telemetry_context)
+        return self.diagnose_software(incident, telemetry_context)
+
+    def diagnose_software(
+        self, incident: dict[str, Any], telemetry_context: dict[str, Any] | None = None
+    ) -> DiagnosisResult:
+        """Software Intelligence Model: specializes in code bugs, 5xx outages, and Devin PRs."""
         iid = incident.get("id", f"INC-{utcnow()}")
         sanitized_context = self._prepare_context(incident, telemetry_context)
 
-        # 1. Try local model (Ollama)
-        try:
-            local_res = self._diagnose_local(iid, sanitized_context)
-            if local_res:
-                return local_res
-        except Exception as e:
-            _LOG.debug("Local diagnosis skipped/failed: %s", e)
-
-        # 2. Try Cloud Gemini fallback if budget permits
+        # 1. Tier 1: Cloud Gemini API
         if self.gemini_api_key and self._can_call_gemini():
             try:
                 gemini_res = self._diagnose_gemini(iid, sanitized_context)
                 if gemini_res:
+                    gemini_res.model_role = "software"
                     return gemini_res
             except Exception as e:
-                _LOG.warning("Cloud Gemini fallback error: %s; falling back to expert rules", e)
+                _LOG.warning("Software model (Gemini) error: %s; falling back", e)
 
-        # 3. Deterministic expert rules (guaranteed to succeed locally)
-        return self._diagnose_expert_rules(iid, incident, sanitized_context)
+        # 2. Tier 2: Local model fallback
+        try:
+            local_res = self._diagnose_local(iid, sanitized_context, role="software")
+            if local_res:
+                local_res.model_role = "software"
+                return local_res
+        except Exception as e:
+            _LOG.debug("Software local fallback skipped/failed: %s", e)
+
+        # 3. Tier 3: Deterministic expert software rules
+        res = self._diagnose_expert_rules(iid, incident, sanitized_context, role="software")
+        res.model_role = "software"
+        return res
+
+    def diagnose_hardware(
+        self, incident: dict[str, Any], telemetry_context: dict[str, Any] | None = None
+    ) -> DiagnosisResult:
+        """Hardware Intelligence Model: specializes in compute saturation, auto-scaling instances, VRAM and thermal safety."""
+        iid = incident.get("id", f"INC-{utcnow()}")
+        sanitized_context = self._prepare_context(incident, telemetry_context)
+
+        # 1. Tier 1: Local Hardware model (Ollama)
+        try:
+            local_res = self._diagnose_local(iid, sanitized_context, role="hardware")
+            if local_res:
+                local_res.model_role = "hardware"
+                return local_res
+        except Exception as e:
+            _LOG.debug("Hardware local diagnosis skipped/failed: %s", e)
+
+        # 2. Tier 2: Deterministic expert hardware guardian rules
+        res = self._diagnose_expert_rules(iid, incident, sanitized_context, role="hardware")
+        res.model_role = "hardware"
+        return res
 
     def _can_call_gemini(self) -> bool:
         now = time.time()
@@ -214,23 +290,43 @@ class IncidentDiagnoser:
             joined = joined.replace(devin_env_k, "[REDACTED_DEVIN_KEY]")
         return joined
 
-    def _diagnose_local(self, iid: str, context: str) -> DiagnosisResult | None:
+    def _diagnose_local(self, iid: str, context: str, role: str = "software") -> DiagnosisResult | None:
         url = f"{self.ollama_url}/api/generate"
-        system = (
-            "You are Aegis AI Infrastructure Diagnoser. Analyze the incident facts.\n"
-            "Respond strictly in JSON matching this schema:\n"
-            "{\n"
-            '  "root_cause_hypothesis": "string",\n'
-            '  "confidence_score": 0.8,\n'
-            '  "is_code_or_config_issue": true,\n'
-            '  "affected_components": ["component1"],\n'
-            '  "recommended_actions": [{"action": "restart_container", "target": "c1", "risk_level": "LOW", "reason": "str", "rollback_plan": "str", "requires_approval": false}],\n'
-            '  "diagnostic_steps": ["step 1"],\n'
-            '  "reproduction_notes": "repro notes"\n'
-            "}"
-        )
+        if role == "hardware":
+            system = (
+                "You are Aegis Hardware & Infrastructure Intelligence Model.\n"
+                "Analyze compute load, CPU/memory/VRAM saturation, and thermal limits.\n"
+                "Recommend hardware actions: scale_instances (increase replicas), evict_idle_model, set_backpressure, trim_cache.\n"
+                "Respond strictly in JSON matching this schema:\n"
+                "{\n"
+                '  "root_cause_hypothesis": "Hardware/compute saturation or thermal limit explanation",\n'
+                '  "confidence_score": 0.85,\n'
+                '  "is_code_or_config_issue": false,\n'
+                '  "affected_components": ["workload_cluster"],\n'
+                '  "recommended_actions": [{"action": "scale_instances", "target": "ai-inference-cluster", "risk_level": "LOW", "reason": "why", "rollback_plan": "scale down", "requires_approval": false}],\n'
+                '  "diagnostic_steps": ["step 1"],\n'
+                '  "reproduction_notes": "repro notes"\n'
+                "}"
+            )
+            model_name = self.hardware_model
+        else:
+            system = (
+                "You are Aegis Software Intelligence Diagnoser. Analyze the application incident facts.\n"
+                "Respond strictly in JSON matching this schema:\n"
+                "{\n"
+                '  "root_cause_hypothesis": "string",\n'
+                '  "confidence_score": 0.8,\n'
+                '  "is_code_or_config_issue": true,\n'
+                '  "affected_components": ["component1"],\n'
+                '  "recommended_actions": [{"action": "restart_container", "target": "c1", "risk_level": "LOW", "reason": "str", "rollback_plan": "str", "requires_approval": false}],\n'
+                '  "diagnostic_steps": ["step 1"],\n'
+                '  "reproduction_notes": "repro notes"\n'
+                "}"
+            )
+            model_name = self.software_model or self.local_model
+
         payload = {
-            "model": self.local_model,
+            "model": model_name,
             "prompt": f"{system}\n\nIncident Telemetry:\n{context}",
             "stream": False,
             "format": "json",
@@ -243,10 +339,11 @@ class IncidentDiagnoser:
                 return DiagnosisResult(
                     incident_id=iid,
                     provider="local_ollama",
-                    model_name=self.local_model,
+                    model_name=model_name,
+                    model_role=role,
                     root_cause_hypothesis=validated.root_cause_hypothesis,
                     confidence_score=validated.confidence_score,
-                    is_code_or_config_issue=validated.is_code_or_config_issue,
+                    is_code_or_config_issue=(role == "software" and validated.is_code_or_config_issue),
                     affected_components=validated.affected_components,
                     recommended_actions=[a.model_dump() for a in validated.recommended_actions],
                     diagnostic_steps=validated.diagnostic_steps,
@@ -296,9 +393,10 @@ class IncidentDiagnoser:
                                 incident_id=iid,
                                 provider="cloud_gemini",
                                 model_name=model,
+                                model_role="software",
                                 root_cause_hypothesis=validated.root_cause_hypothesis or validated.root_cause,
                                 confidence_score=validated.confidence_score or validated.confidence,
-                                is_code_or_config_issue=validated.is_code_or_config_issue,
+                                is_code_or_config_issue=True,
                                 affected_components=validated.affected_components or validated.affected_files,
                                 affected_files=validated.affected_files or validated.affected_components,
                                 reproduction_steps=validated.reproduction_steps or validated.diagnostic_steps,
@@ -318,7 +416,7 @@ class IncidentDiagnoser:
         return None
 
     def _diagnose_expert_rules(
-        self, iid: str, incident: dict[str, Any], context: str
+        self, iid: str, incident: dict[str, Any], context: str, role: str = "software"
     ) -> DiagnosisResult:
         """Deterministic expert rule-based diagnosis engine."""
         cat = incident.get("category", "")
@@ -327,10 +425,71 @@ class IncidentDiagnoser:
 
         actions: list[dict[str, Any]] = []
         steps: list[str] = []
-        is_code = False
+        is_code = (role == "software")
         confidence = 0.85
+        model_name = "aegis-hardware-guardian-v1" if role == "hardware" else "aegis-rule-engine-v1"
 
-        if "oom" in cat or "137" in summary:
+        if role == "hardware" or self.is_hardware_incident(incident):
+            is_code = False
+            role = "hardware"
+            model_name = "aegis-hardware-guardian-v1"
+            if "thermal" in cat.lower():
+                hypothesis = "Sustained high hardware temperature or thermal throttling caused by intensive computation or cooling restriction."
+                confidence = 0.90
+                actions.append({
+                    "action": "set_backpressure",
+                    "target": "inference_queue",
+                    "risk_level": "LOW",
+                    "reason": "Hardware temperature crossed thermal safety threshold",
+                    "rollback_plan": "Clear backpressure once temperatures return below recovery threshold",
+                    "requires_approval": False,
+                })
+                actions.append({
+                    "action": "scale_instances",
+                    "target": "workload_cluster",
+                    "risk_level": "LOW",
+                    "reason": "Scale out instances to distribute compute dissipation across cluster nodes",
+                    "rollback_plan": "Scale back after temperature normalizes",
+                    "requires_approval": False,
+                })
+                steps = [
+                    "Identify top CPU/GPU resource-consuming processes.",
+                    "Verify cooling fans and ventilation airflow.",
+                    "Engage rate limiting and temporary batch size reduction.",
+                ]
+            else:
+                hypothesis = f"Host hardware compute or resource saturation: {summary or cat}"
+                confidence = 0.90
+                actions.append({
+                    "action": "scale_instances",
+                    "target": "ai-inference-cluster",
+                    "risk_level": "LOW",
+                    "reason": "Hardware model auto-scaling instance replicas to handle compute load",
+                    "rollback_plan": "Scale back down after load normalizes",
+                    "requires_approval": False,
+                })
+                actions.append({
+                    "action": "evict_idle_model",
+                    "target": "ai-inference-vram",
+                    "risk_level": "LOW",
+                    "reason": "Hardware model evicts idle model weights to free host GPU/RAM",
+                    "rollback_plan": "Reload model on next inference request",
+                    "requires_approval": False,
+                })
+                actions.append({
+                    "action": "trim_cache",
+                    "target": "host_resources",
+                    "risk_level": "LOW",
+                    "reason": summary or "Deterministic cache memory trim",
+                    "rollback_plan": "Re-enable cache filling",
+                    "requires_approval": False,
+                })
+                steps = [
+                    "Inspect CPU, memory, and VRAM utilization trends across active pods and nodes.",
+                    "Evaluate auto-scaling policy and trigger instance scale-out.",
+                    "Unload idle model weights and trim page buffers.",
+                ]
+        elif "oom" in cat or "137" in summary:
             hypothesis = "Process or container exceeded allocated memory limits or encountered a rapid memory leak."
             is_code = True
             actions.append({
@@ -362,47 +521,16 @@ class IncidentDiagnoser:
                 "Check for missing environment variables or unresolvable connection strings.",
                 "Verify database schema migrations or dependent endpoint health.",
             ]
-        elif "thermal" in cat:
-            hypothesis = "Sustained high hardware temperature or thermal throttling caused by intensive computation or cooling restriction."
-            is_code = False
-            confidence = 0.90
-            actions.append({
-                "action": "set_backpressure",
-                "target": "inference_queue",
-                "risk_level": "LOW",
-                "reason": "Hardware temperature crossed thermal safety threshold",
-                "rollback_plan": "Clear backpressure once temperatures return below recovery threshold",
-                "requires_approval": False,
-            })
-            steps = [
-                "Identify top CPU/GPU resource-consuming processes.",
-                "Verify cooling fans and ventilation airflow.",
-                "Engage rate limiting and temporary batch size reduction.",
-            ]
-        elif "resource" in cat:
-            hypothesis = "Host resource saturation: memory, disk, or CPU capacity exceeded configured warning/critical thresholds."
-            is_code = False
-            confidence = 0.90
-            actions.append({
-                "action": "recommend_storage_cleanup_or_cache_trim",
-                "target": "host_resources",
-                "risk_level": "LOW",
-                "reason": summary,
-                "rollback_plan": "Re-enable cache filling",
-                "requires_approval": False,
-            })
-            steps = [
-                "Inspect disk partitions for runaway log files or temporary artifacts.",
-                "Review memory breakdown between active processes and buffer/cache.",
-            ]
         else:
             hypothesis = f"Operational anomaly in category '{cat}': {summary}"
+            is_code = True
             steps = ["Review recent service logs and correlated telemetry around the incident timestamp."]
 
         return DiagnosisResult(
             incident_id=iid,
             provider="deterministic_expert",
-            model_name="aegis-rule-engine-v1",
+            model_name=model_name,
+            model_role=role,
             root_cause_hypothesis=hypothesis,
             confidence_score=confidence,
             is_code_or_config_issue=is_code,
