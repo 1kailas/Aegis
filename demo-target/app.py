@@ -24,7 +24,7 @@ from flask import Flask, jsonify, render_template_string, request
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 _LOG = logging.getLogger("webliz.store")
 
-AEGIS_CONTROL_PLANE = os.environ.get("AEGIS_URL", "http://127.0.0.1:8000")
+AEGIS_CONTROL_PLANE = os.environ.get("AEGIS_URL", "http://127.0.0.1:8080")
 
 # In-memory application state
 _STATE = {
@@ -235,7 +235,7 @@ STOREFRONT_HTML = """
     <div style="display:flex; align-items:center; gap:10px;">
       <button class="btn btn-danger" id="btnBreak" onclick="triggerOutage()">💥 Inject 500 Outage Bug</button>
       <button class="btn btn-ok" id="btnFix" onclick="resolveOutage()">✨ Apply Fix / Recover</button>
-      <a href="http://localhost:8000" target="_blank" class="btn btn-primary">🛡️ Open Aegis AI Dashboard ↗</a>
+      <a href="http://localhost:8080" target="_blank" class="btn btn-primary">🛡️ Open Aegis AI Dashboard (8080) ↗</a>
     </div>
   </div>
 
