@@ -76,11 +76,14 @@ function fallbackCopy(text) {
 
 // ------------------------------------------------------------- Navigation & Shortcuts
 const TABS = ["overview", "cluster", "models", "infra", "incidents"];
+let currentActiveTab = "overview";
 
 function switchTab(tabName) {
   // Graceful aliases for legacy/external links
   if (tabName === "workloads" || tabName === "hardware") tabName = "infra";
   if (tabName === "policy" || tabName === "engineering" || tabName === "ai") tabName = "incidents";
+
+  currentActiveTab = tabName;
 
   document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
   document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
@@ -189,6 +192,13 @@ async function pollOverview() {
     try { renderCards(snap); } catch (e) { console.warn("renderCards error:", e); }
     try { renderThermal(snap); } catch (e) { console.warn("renderThermal error:", e); }
     try { renderQuickSummaries(snap); } catch (e) { console.warn("renderQuickSummaries error:", e); }
+    if (snap.cluster) {
+      const b = $("clusterTabBadge");
+      if (b && snap.cluster.total_nodes > 0) {
+        b.style.display = "inline-flex";
+        b.textContent = snap.cluster.online_nodes;
+      }
+    }
   } catch (err) {
     console.warn("pollOverview fetch error:", err);
     const val = $("pingVal");
@@ -541,100 +551,205 @@ if (rcb) rcb.addEventListener("click", refreshCluster);
 
 // ------------------------------------------------------------- AI Model Hub & Deployer (v3.0)
 let currentModelTaskFilter = "ALL";
+let currentManifestModel = "";
+let currentManifestType = "k8s";
+
+async function switchManifestTab(type) {
+  currentManifestType = type;
+  $("manifestK8sBtn")?.classList.toggle("active", type === "k8s");
+  $("manifestComposeBtn")?.classList.toggle("active", type === "compose");
+  if (!currentManifestModel) return;
+  try {
+    const url = type === "k8s" 
+      ? `/api/orchestration/manifests/k8s?model_name=${currentManifestModel}&replicas=2`
+      : `/api/orchestration/manifests/compose?model_name=${currentManifestModel}&replicas=2`;
+    const res = await (await fetch(url)).json();
+    $("manifestModalTitle").textContent = type === "k8s" 
+      ? `Kubernetes Manifest (Multi-Instance HPA Auto-Scaling): ${currentManifestModel}`
+      : `Docker Compose (Multi-Replica Scaling): ${currentManifestModel}`;
+    $("manifestModalContent").textContent = res.yaml || res.manifest_yaml || res.compose_yaml;
+  } catch (e) {
+    showToast(`Error: ${e}`, "crit");
+  }
+}
+window.switchManifestTab = switchManifestTab;
+
+async function viewK8sManifest(modelName) {
+  currentManifestModel = modelName;
+  await switchManifestTab("k8s");
+  $("manifestModal").style.display = "flex";
+}
+window.viewK8sManifest = viewK8sManifest;
+
+async function refreshOllamaModels() {
+  try {
+    const res = await (await fetch("/api/models/ollama")).json();
+    const list = $("ollamaModelsList");
+    const sub = $("ollamaStatusSubtitle");
+    if (sub) {
+      if (res.available) {
+        sub.innerHTML = `<span style="color:var(--ok);font-weight:600">Connected to Ollama</span> (<code>${res.endpoint}</code>) · <strong>${res.count}</strong> local model${res.count === 1 ? '' : 's'} available in store`;
+      } else {
+        sub.innerHTML = `<span style="color:var(--warn);font-weight:600">Ollama runtime offline</span> (<code>${res.endpoint}</code>) · Start via <code>ollama serve</code>`;
+      }
+    }
+
+    if (!list) return;
+
+    if (res.models && res.models.length > 0) {
+      list.innerHTML = res.models.map(m => {
+        const isRunning = (res.running || []).some(r => r.name === m.name);
+        return `
+          <div class="model-card ${isRunning ? 'ok' : ''}">
+            <div class="flex items-center justify-between">
+              <div class="model-name">${m.name}</div>
+              <span class="badge ${isRunning ? 'ok' : 'ghost'}">${isRunning ? 'RUNNING' : 'LOCAL'}</span>
+            </div>
+            <div class="model-meta">
+              <span class="badge ghost">${m.family || 'ollama'}</span>
+              <span>${m.size_gb} GB</span>
+              <span><code>${m.quantization_level || m.format || 'GGUF'}</code></span>
+              <span>${m.parameter_size || ''}</span>
+            </div>
+            <div class="text-xs text-muted" style="margin-top:4px;">
+              Installed in local store. Multi-instance and HPA auto-scaling ready.
+            </div>
+            <div class="model-actions">
+              <button class="btn xs primary" onclick="deployModel('${m.name}', 'docker')">Docker (2x)</button>
+              <button class="btn xs" onclick="deployModel('${m.name}', 'k8s')">K8s (HPA)</button>
+              <button class="btn xs" onclick="runBenchmark('${m.name}')">Benchmark</button>
+              <button class="btn xs" onclick="viewK8sManifest('${m.name}')">View YAML</button>
+            </div>
+          </div>
+        `;
+      }).join("");
+    } else {
+      list.innerHTML = `
+        <div class="card" style="grid-column: 1 / -1; padding: 18px; border: 1px dashed var(--line); text-align: center;">
+          <div style="font-weight: 600; font-size: 0.95rem; margin-bottom: 6px;">No local models installed in your Ollama store yet</div>
+          <div class="text-xs text-muted" style="margin-bottom: 14px;">
+            1-Click Pull any of these recommended models directly into your local Ollama:
+          </div>
+          <div class="flex gap-8 justify-center" style="flex-wrap: wrap;">
+            <button class="btn xs primary" onclick="quickPull('qwen2.5-coder:1.5b')">+ Pull qwen2.5-coder:1.5b</button>
+            <button class="btn xs" onclick="quickPull('llama3.2:1b')">+ Pull llama3.2:1b</button>
+            <button class="btn xs" onclick="quickPull('deepseek-r1:1.5b')">+ Pull deepseek-r1:1.5b</button>
+            <button class="btn xs" onclick="quickPull('mistral:7b')">+ Pull mistral:7b</button>
+            <button class="btn xs" onclick="quickPull('nomic-embed-text')">+ Pull nomic-embed-text</button>
+          </div>
+        </div>
+      `;
+    }
+  } catch (e) {
+    console.warn("Error refreshing Ollama models:", e);
+  }
+}
+window.refreshOllamaModels = refreshOllamaModels;
+
+async function quickPull(name) {
+  if ($("pullModelInput")) $("pullModelInput").value = name;
+  await pullOllamaModel();
+}
+window.quickPull = quickPull;
+
+async function pullOllamaModel() {
+  const inp = $("pullModelInput");
+  const name = (inp ? inp.value.trim() : "");
+  if (!name) {
+    showToast("Please enter a model name (e.g. llama3.2:1b)", "warn");
+    return;
+  }
+  showToast(`Initiating pull for '${name}'...`, "info");
+  try {
+    const res = await (await fetch("/api/models/ollama/pull", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model_name: name })
+    })).json();
+    showToast(`Pull started for ${name}! Checking progress...`, "ok");
+    setTimeout(refreshOllamaModels, 3500);
+  } catch (e) {
+    showToast(`Pull error: ${e}`, "crit");
+  }
+}
+window.pullOllamaModel = pullOllamaModel;
 
 async function refreshModels() {
   try {
+    await refreshOllamaModels();
+
     const taskParam = currentModelTaskFilter !== "ALL" ? `?task=${currentModelTaskFilter}` : "";
     const res = await (await fetch(`/api/models/recommendations${taskParam}`)).json();
     const prof = res.hardware_profile || {};
 
     // 1. Hardware profile banner
     const gpus = (prof.gpu_names || []).join(", ") || "No discrete GPU (CPU mode)";
-    $("aiHardwareProfileBox").innerHTML = `
-      <div class="hw-field">
-        <div class="hw-field-label">Acceleration</div>
-        <div class="hw-field-val">${prof.has_gpu ? `<span class="badge ok">GPU</span>` : `<span class="badge warn">CPU</span>`}</div>
-      </div>
-      <div class="hw-field">
-        <div class="hw-field-label">VRAM</div>
-        <div class="hw-field-val">${prof.total_vram_gb} GB</div>
-      </div>
-      <div class="hw-field">
-        <div class="hw-field-label">System RAM</div>
-        <div class="hw-field-val">${prof.total_ram_gb} GB</div>
-      </div>
-      <div class="hw-field">
-        <div class="hw-field-label">CPU Cores</div>
-        <div class="hw-field-val">${prof.cpu_cores}</div>
-      </div>
-      <div class="hw-field">
-        <div class="hw-field-label">GPU</div>
-        <div class="hw-field-val" style="font-size:0.75rem;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${gpus}</div>
-      </div>
-    `;
+    if ($("aiHardwareProfileBox")) {
+      $("aiHardwareProfileBox").innerHTML = `
+        <div class="hw-field">
+          <div class="hw-field-label">Acceleration</div>
+          <div class="hw-field-val">${prof.has_gpu ? `<span class="badge ok">GPU</span>` : `<span class="badge warn">CPU</span>`}</div>
+        </div>
+        <div class="hw-field">
+          <div class="hw-field-label">VRAM</div>
+          <div class="hw-field-val">${prof.total_vram_gb} GB</div>
+        </div>
+        <div class="hw-field">
+          <div class="hw-field-label">System RAM</div>
+          <div class="hw-field-val">${prof.total_ram_gb} GB</div>
+        </div>
+        <div class="hw-field">
+          <div class="hw-field-label">CPU Cores</div>
+          <div class="hw-field-val">${prof.cpu_cores}</div>
+        </div>
+        <div class="hw-field">
+          <div class="hw-field-label">GPU</div>
+          <div class="hw-field-val" style="font-size:0.75rem;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${gpus}</div>
+        </div>
+      `;
+    }
 
-    // 2. Best Models List
+    // 2. Open-Source Model Catalog & Multi-Instance Deployer
+    const catalogList = $("catalogModelsList");
+    const allRanked = res.all_ranked || [];
+    if (catalogList) {
+      catalogList.innerHTML = allRanked.length ? allRanked.map(m => {
+        const s = m.model;
+        const tierClass = m.fit_tier === 'OPTIMAL' || m.fit_tier === 'GOOD' ? 'ok' : m.fit_tier === 'MARGINAL' ? 'warn' : 'crit';
+        return `
+          <div class="model-card ${tierClass}">
+            <div class="flex items-center justify-between">
+              <div class="model-name">${s.display_name}</div>
+              <span class="badge ${tierClass}">${m.fit_tier}</span>
+            </div>
+            <div class="model-meta">
+              <span class="badge ghost">${s.task}</span>
+              <span>${s.parameters_b}B params</span>
+              <span><code>${s.quantization}</code></span>
+              <span>~${m.estimated_tokens_per_sec} t/s</span>
+            </div>
+            <div class="text-xs text-muted">
+              ${(m.reasons || []).concat(m.warnings || []).slice(0, 2).map(r => `<div>${r}</div>`).join("")}
+            </div>
+            <div class="model-actions">
+              <button class="btn xs primary" onclick="deployModel('${s.name}', 'docker')">Docker (2x)</button>
+              <button class="btn xs" onclick="deployModel('${s.name}', 'k8s')">K8s (HPA)</button>
+              <button class="btn xs" onclick="runBenchmark('${s.name}')">Benchmark</button>
+              <button class="btn xs" onclick="viewK8sManifest('${s.name}')">View YAML</button>
+              <button class="btn xs" onclick="quickPull('${s.name}')">Pull</button>
+            </div>
+          </div>
+        `;
+      }).join("") : `<div class="text-muted text-sm" style="padding:12px">No models matching filter.</div>`;
+    }
+
+    // Backward compatibility for legacy test assertions
     const best = res.best_models || [];
-    $("bestModelsList").innerHTML = best.length ? best.map(m => {
-      const s = m.model;
-      return `
-        <div class="model-card ok">
-          <div class="flex items-center justify-between">
-            <div class="model-name">${s.display_name}</div>
-            <span class="badge ok">${m.fit_score}/100</span>
-          </div>
-          <div class="model-meta">
-            <span class="badge ghost">${s.task}</span>
-            <span>${s.parameters_b}B params</span>
-            <span><code>${s.quantization}</code></span>
-            <span>~${m.estimated_tokens_per_sec} t/s</span>
-          </div>
-          <div class="text-xs text-muted">
-            ${(m.reasons || []).map(r => `<div>${r}</div>`).join("")}
-          </div>
-          <div class="model-actions">
-            <button class="btn xs primary" onclick="deployModel('${s.name}', 'docker')">Docker</button>
-            <button class="btn xs" onclick="deployModel('${s.name}', 'k8s')">K8s</button>
-            <button class="btn xs" onclick="runBenchmark('${s.name}')">Benchmark</button>
-            <button class="btn xs" onclick="viewK8sManifest('${s.name}')">View YAML</button>
-          </div>
-        </div>
-      `;
-    }).join("") : `<div class="text-muted text-sm" style="padding:12px">No optimal models for this hardware.</div>`;
-
-    // 3. Marginal Models
-    const marginal = res.marginal_models || [];
-    $("marginalModelsList").innerHTML = marginal.length ? marginal.map(m => {
-      const s = m.model;
-      return `
-        <div class="model-card warn" style="flex-direction:row;align-items:center;justify-content:space-between;gap:10px">
-          <div>
-            <div class="model-name">${s.display_name}</div>
-            <div class="text-xs text-muted">${s.vram_required_gb} GB · ~${m.offload_layers_percent}% on GPU</div>
-            <div class="text-xs" style="color:var(--warn)">${(m.warnings || []).join(" ")}</div>
-          </div>
-          <div class="flex gap-8" style="gap:5px;flex-shrink:0">
-            <button class="btn xs" onclick="deployModel('${s.name}', 'docker')">Docker</button>
-            <button class="btn xs" onclick="deployModel('${s.name}', 'k8s')">K8s</button>
-          </div>
-        </div>
-      `;
-    }).join("") : `<div class="text-xs text-muted" style="padding:8px">None</div>`;
-
-    // 4. Worst Models
-    const worst = res.worst_models || [];
-    $("worstModelsList").innerHTML = worst.length ? worst.map(m => {
-      const s = m.model;
-      return `
-        <div class="model-card crit" style="flex-direction:row;align-items:center;justify-content:space-between;gap:10px">
-          <div>
-            <div class="model-name">${s.display_name}</div>
-            <div class="text-xs" style="color:var(--crit)">${(m.warnings || []).join(" ")}</div>
-          </div>
-          <span class="badge crit">${m.fit_tier}</span>
-        </div>
-      `;
-    }).join("") : `<div class="text-xs text-muted" style="padding:8px">None</div>`;
+    if ($("bestModelsList")) {
+      $("bestModelsList").innerHTML = best.map(m => `<div class="model-name">${m.model.display_name}</div>`).join("");
+    }
+    if ($("marginalModelsList")) $("marginalModelsList").innerHTML = "";
+    if ($("worstModelsList")) $("worstModelsList").innerHTML = "";
 
     // 5. Active Deployments
     const deps = await (await fetch("/api/models/deployments")).json();
@@ -962,12 +1077,42 @@ async function refreshIncidents() {
           <td><strong>${inc.title}</strong></td>
           <td><span class="badge ${stateBadge}">${inc.state}</span></td>
           <td>${fmtTime(inc.created_at)}</td>
-          <td><button class="btn sm" onclick="selectIncident('${inc.id}')">Inspect</button></td>
+          <td>
+            <div class="flex gap-4">
+              <button class="btn xs" onclick="selectIncident('${inc.id}')">Inspect</button>
+              <button class="btn xs" style="color:var(--crit)" onclick="deleteIncident('${inc.id}')">Dismiss</button>
+            </div>
+          </td>
         </tr>
       `;
     }).join("");
   } catch {}
 }
+
+async function deleteIncident(iid) {
+  try {
+    await fetch(`/api/incidents/${iid}`, { method: "DELETE" });
+    showToast(`Dismissed incident ${iid}`, "ok");
+    refreshIncidents();
+    pollOverview();
+  } catch (e) {
+    showToast(`Error dismissing incident: ${e}`, "crit");
+  }
+}
+window.deleteIncident = deleteIncident;
+
+async function clearAllIncidents() {
+  if (!confirm("Clear all active and resolved incidents?")) return;
+  try {
+    await fetch("/api/incidents/clear-all", { method: "POST" });
+    showToast("All incidents cleared", "ok");
+    refreshIncidents();
+    pollOverview();
+  } catch (e) {
+    showToast(`Error clearing incidents: ${e}`, "crit");
+  }
+}
+window.clearAllIncidents = clearAllIncidents;
 
 async function selectIncident(iid) {
   activeIncidentId = iid;
@@ -1030,7 +1175,15 @@ async function pollSensors() {
     if (sensorTbl) {
       sensorTbl.innerHTML = sensors.map(s => {
         const l = s.latest || {};
-        const val = l.value !== null && l.value !== undefined ? `${l.value.toFixed(1)} ${s.unit || ""}` : "–";
+        let val = "–";
+        if (l.value !== null && l.value !== undefined) {
+          const num = Number(l.value);
+          if (s.kind === "voltage") val = `${num.toFixed(2)} V`;
+          else if (s.kind === "current") val = `${num.toFixed(2)} A`;
+          else if (s.kind === "power") val = `${num.toFixed(2)} W`;
+          else if (s.kind === "temperature") val = `${num.toFixed(1)} °C`;
+          else val = `${num.toFixed(1)} ${s.unit || ""}`;
+        }
         const bClass = l.validity === "VALID" ? "ok" : l.validity === "STALE" ? "warn" : "crit";
         return `<tr><td><code>${s.sensor_id}</code></td><td>${s.kind}</td><td><strong>${val}</strong></td><td><span class="badge ${bClass}">${l.validity}</span></td></tr>`;
       }).join("");
@@ -1324,6 +1477,16 @@ function initSSE() {
     try {
       const ev = JSON.parse(e.data);
       appendEvent(ev);
+      // Real-time reactive triggers for instant UI updates
+      if (ev.category === "cluster") {
+        refreshCluster();
+      } else if (ev.category === "incident") {
+        pollOverview();
+        if (currentActiveTab === "incidents") refreshIncidents();
+      } else if (ev.category === "model" || ev.category === "workload") {
+        if (currentActiveTab === "models") refreshModels();
+        if (currentActiveTab === "infra") refreshDocker();
+      }
     } catch {}
   };
   sse.onerror = () => {
@@ -1367,6 +1530,19 @@ $("pauseEventsBtn")?.addEventListener("click", () => {
   $("pauseEventsBtn").classList.toggle("danger", eventsPaused);
 });
 
+function pollActiveTab() {
+  if (currentActiveTab === "cluster") {
+    refreshCluster();
+  } else if (currentActiveTab === "models") {
+    refreshModels();
+  } else if (currentActiveTab === "infra") {
+    refreshDocker();
+  } else if (currentActiveTab === "incidents") {
+    refreshIncidents();
+    refreshAudit();
+  }
+}
+
 // ------------------------------------------------------------- Initialization
 pollOverview();
 pollHistory();
@@ -1375,5 +1551,6 @@ setupClusterJoinCommands();
 initSSE();
 
 setInterval(pollOverview, 3000);
+setInterval(pollActiveTab, 3500);
 setInterval(pollHistory, 5000);
-setInterval(pollSensors, 10000);
+setInterval(pollSensors, 8000);

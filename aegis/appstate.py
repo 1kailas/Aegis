@@ -321,6 +321,7 @@ class AppContext:
             "ai_workloads": self.ai_workloads.sample(),
             "devin": self.devin.status(),
             "events": [e.__dict__ for e in self.events.latest(10)],
+            "cluster": self.cluster.cluster_summary() if hasattr(self, "cluster") else None,
             "overrides_enabled": self.config.monitoring.simulated_overrides_enabled,
             "active_overrides": {
                 s: {"value_c": e.value_c, "note": e.note}

@@ -168,6 +168,17 @@ class IncidentStore:
                 (limit,))
         return [_hydrate(r) for r in rows]
 
+    def delete(self, incident_id: str) -> bool:
+        row = self.db.query_one("SELECT id FROM incidents WHERE id=?", (incident_id,))
+        if not row:
+            return False
+        self.db.execute("DELETE FROM incidents WHERE id=?", (incident_id,))
+        return True
+
+    def clear_all(self) -> int:
+        cur = self.db.execute("DELETE FROM incidents")
+        return cur.rowcount
+
 
 def _hydrate(row) -> dict[str, Any]:  # type: ignore[no-untyped-def]
     inc = dict(row)

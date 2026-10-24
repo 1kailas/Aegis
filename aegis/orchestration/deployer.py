@@ -169,12 +169,12 @@ class OneClickDeployer:
         namespace: str = "default",
         port: int = 11434,
         gpu: bool = True,
-        replicas: int = 1,
+        replicas: int = 2,
         image: str = "ollama/ollama:latest",
     ) -> str:
-        """Generates production-grade Kubernetes YAML manifests."""
+        """Generates production-grade Kubernetes YAML manifests with multi-instance replicas & HPA auto-scaling."""
         app_label = f"aegis-{clean_name(model_name)}"
-        gpu_resource = "nvidia.com/gpu: 1" if gpu else ""
+        max_replicas = max(replicas * 3, 5)
 
         gpu_spec = ""
         if gpu:
@@ -210,6 +210,11 @@ metadata:
     managed-by: aegis-ai
 spec:
   replicas: {replicas}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: {app_label}
@@ -218,6 +223,18 @@ spec:
       labels:
         app: {app_label}
     spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {app_label}
+              topologyKey: kubernetes.io/hostname
       containers:
       - name: model-server
         image: {image}
@@ -227,6 +244,8 @@ spec:
         env:
         - name: OLLAMA_KEEP_ALIVE
           value: "24h"
+        - name: OLLAMA_NUM_PARALLEL
+          value: "4"
 {gpu_spec}
         readinessProbe:
           httpGet:
@@ -250,8 +269,94 @@ spec:
     name: http
   selector:
     app: {app_label}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {app_label}-hpa
+  namespace: {namespace}
+  labels:
+    app: {app_label}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {app_label}
+  minReplicas: {replicas}
+  maxReplicas: {max_replicas}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 75
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
 """
         return manifest.strip()
+
+    def generate_docker_compose(
+        self,
+        model_name: str,
+        port: int = 11434,
+        gpu: bool = True,
+        replicas: int = 2,
+        image: str = "ollama/ollama:latest",
+    ) -> str:
+        """Generates production Docker Compose YAML with multi-instance replica scaling."""
+        app_label = f"aegis-{clean_name(model_name)}"
+        gpu_config = ""
+        if gpu:
+            gpu_config = """
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]"""
+
+        compose = f"""version: '3.8'
+
+services:
+  {app_label}:
+    image: {image}
+    restart: always
+    deploy:
+      replicas: {replicas}
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:{gpu_config}
+        limits:
+          memory: 16G
+          cpus: '4.0'
+        reservations:
+          memory: 4G
+          cpus: '1.0'
+    ports:
+      - "{port}:11434"
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+      - OLLAMA_NUM_PARALLEL=4
+    volumes:
+      - aegis-models:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  aegis-models:
+    name: aegis-models
+"""
+        return compose.strip()
 
     def deploy_k8s(
         self,

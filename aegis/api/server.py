@@ -297,6 +297,20 @@ def create_app(ctx: AppContext) -> FastAPI:
     def incidents(state: str | None = None, limit: int = 25) -> list[dict[str, Any]]:
         return ctx.incidents.list(state=state, limit=min(limit, 200))
 
+    @app.delete("/api/incidents/{incident_id}", dependencies=[Depends(_auth_dp(ctx))])
+    def incident_delete(incident_id: str) -> dict[str, Any]:
+        ok = ctx.incidents.delete(incident_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Incident not found")
+        ctx.events.emit("incident", f"Incident {incident_id} dismissed/deleted", "info", incident_id=incident_id)
+        return {"deleted": True, "incident_id": incident_id}
+
+    @app.post("/api/incidents/clear-all", dependencies=[Depends(_auth_dp(ctx))])
+    def incidents_clear_all() -> dict[str, Any]:
+        count = ctx.incidents.clear_all()
+        ctx.events.emit("incident", f"All incidents cleared ({count} removed)", "info")
+        return {"cleared": True, "count": count}
+
     @app.post("/api/incidents/{incident_id}/diagnose")
     def incident_diagnose(incident_id: str) -> dict[str, Any]:
         inc = ctx.incidents.get(incident_id)
@@ -843,9 +857,104 @@ def create_app(ctx: AppContext) -> FastAPI:
             replicas=replicas,
         )
 
+    @app.get("/api/models/ollama")
+    def get_ollama_models() -> dict[str, Any]:
+        """Queries local Ollama instance for installed and running models."""
+        import httpx
+        ollama_url = getattr(ctx.config.models, "ollama_url", "http://127.0.0.1:11434").rstrip("/")
+        timeout_s = 2.5
+        models_out = []
+        running_out = []
+        is_available = False
+        error_msg = None
+
+        try:
+            with httpx.Client(timeout=timeout_s) as client:
+                r_tags = client.get(f"{ollama_url}/api/tags")
+                if r_tags.status_code == 200:
+                    is_available = True
+                    raw_models = r_tags.json().get("models", [])
+                    for m in raw_models:
+                        size_bytes = m.get("size", 0)
+                        size_gb = round(size_bytes / (1024 ** 3), 2)
+                        details = m.get("details", {})
+                        models_out.append({
+                            "name": m.get("name"),
+                            "model": m.get("model", m.get("name")),
+                            "size_gb": size_gb,
+                            "format": details.get("format", "gguf"),
+                            "family": details.get("family", "unknown"),
+                            "parameter_size": details.get("parameter_size", "unknown"),
+                            "quantization_level": details.get("quantization_level", "unknown"),
+                            "modified_at": m.get("modified_at"),
+                        })
+                else:
+                    error_msg = f"HTTP {r_tags.status_code}"
+
+                try:
+                    r_ps = client.get(f"{ollama_url}/api/ps")
+                    if r_ps.status_code == 200:
+                        raw_running = r_ps.json().get("models", [])
+                        for rm in raw_running:
+                            running_out.append({
+                                "name": rm.get("name"),
+                                "size_vram_mb": round(rm.get("size_vram", 0) / (1024 * 1024), 1),
+                                "expires_at": rm.get("expires_at"),
+                            })
+                except Exception:
+                    pass
+        except Exception as exc:
+            error_msg = str(exc)
+
+        return {
+            "available": is_available,
+            "endpoint": ollama_url,
+            "count": len(models_out),
+            "models": models_out,
+            "running": running_out,
+            "error": error_msg,
+        }
+
+    @app.post("/api/models/ollama/pull", dependencies=[Depends(_auth_dp(ctx))])
+    def pull_ollama_model(payload: dict[str, Any]) -> dict[str, Any]:
+        """Triggers asynchronous model pull in Ollama."""
+        import httpx
+        model_name = payload.get("model_name")
+        if not model_name:
+            raise HTTPException(status_code=422, detail="model_name required")
+        ollama_url = getattr(ctx.config.models, "ollama_url", "http://127.0.0.1:11434").rstrip("/")
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                r = client.post(f"{ollama_url}/api/pull", json={"name": model_name, "stream": False})
+                return {"status": "started", "model_name": model_name, "result": r.json() if r.status_code == 200 else r.text}
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Ollama pull failed: {exc}")
+
+    @app.get("/api/orchestration/manifests/compose")
+    def get_docker_compose_manifest(
+        model_name: str = "qwen2.5-coder:7b",
+        port: int = 11434,
+        gpu: bool = True,
+        replicas: int = 2,
+    ) -> dict[str, Any]:
+        compose_yaml = ctx.deployer.generate_docker_compose(
+            model_name=model_name,
+            port=port,
+            gpu=gpu,
+            replicas=replicas,
+        )
+        return {
+            "model_name": model_name,
+            "port": port,
+            "gpu": gpu,
+            "replicas": replicas,
+            "compose_yaml": compose_yaml,
+            "yaml": compose_yaml,
+        }
+
     @app.get("/api/orchestration/manifests/k8s")
-    def get_k8s_manifest(model_name: str = "qwen2.5-coder:7b", namespace: str = "default", port: int = 11434, gpu: bool = True) -> dict[str, Any]:
-        yaml_content = ctx.deployer.generate_k8s_manifest(model_name=model_name, namespace=namespace, port=port, gpu=gpu)
+    def get_k8s_manifest(model_name: str = "qwen2.5-coder:7b", namespace: str = "default", port: int = 11434, gpu: bool = True, replicas: int = 2) -> dict[str, Any]:
+        yaml_content = ctx.deployer.generate_k8s_manifest(model_name=model_name, namespace=namespace, port=port, gpu=gpu, replicas=replicas)
         return {"model_name": model_name, "namespace": namespace, "manifest_yaml": yaml_content, "yaml": yaml_content}
 
     @app.post("/api/orchestration/manifests/k8s")

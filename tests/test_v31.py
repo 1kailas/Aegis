@@ -232,3 +232,40 @@ def test_v31_documentation_portal_endpoints(app_ctx: AppContext):
     assert r_redirect.status_code in (301, 302, 307)
     assert r_redirect.headers["location"] == "/api/docs"
 
+
+def test_v32_ollama_compose_and_incident_dismissal(app_ctx: AppContext):
+    """Verify v3.2.0 local Ollama discovery, Docker Compose multi-instance generation, and incident dismissal."""
+    app = create_app(app_ctx)
+    client = TestClient(app)
+
+    # 1. GET /api/models/ollama
+    r_ollama = client.get("/api/models/ollama")
+    assert r_ollama.status_code == 200
+    o_data = r_ollama.json()
+    assert "models" in o_data
+    assert "available" in o_data
+
+    # 2. GET /api/orchestration/manifests/compose
+    r_comp = client.get("/api/orchestration/manifests/compose?model_name=llama3.2:1b&replicas=2")
+    assert r_comp.status_code == 200
+    comp_data = r_comp.json()
+    assert "compose_yaml" in comp_data
+    assert "replicas: 2" in comp_data["compose_yaml"]
+    assert "aegis-models" in comp_data["compose_yaml"]
+
+    # 3. GET /api/orchestration/manifests/k8s (with HPA and multi-instance)
+    r_k8s = client.get("/api/orchestration/manifests/k8s?model_name=llama3.2:1b&replicas=2")
+    assert r_k8s.status_code == 200
+    k8s_data = r_k8s.json()
+    assert "HorizontalPodAutoscaler" in k8s_data["manifest_yaml"]
+    assert "podAntiAffinity" in k8s_data["manifest_yaml"]
+
+    # 4. Incident dismissal & clear all
+    app_ctx.incidents.create(category="test", title="Test incident", summary="To be cleared", severity="warning")
+    assert len(client.get("/api/incidents").json()) >= 1
+
+    r_clear = client.post("/api/incidents/clear-all")
+    assert r_clear.status_code == 200
+    assert r_clear.json()["cleared"] is True
+    assert len(client.get("/api/incidents").json()) == 0
+

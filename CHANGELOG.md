@@ -7,7 +7,21 @@ All notable changes to the **Aegis AI** platform are documented in this file in 
 ## 2026-10-25T01:55:00+05:30 — Aegis AI v3.2.0: Production SRE Console, Resilient API Routing & Judge Demonstration Release
 
 - **Changed:**
-  - **SRE Operations Console & UI Streamlining**:
+  - **Ollama Local Model Integration & Multi-Instance Auto-Scaling**:
+    - Replaced the static "2 model" recommendations panel with a dynamic **"My Ollama Models"** manager querying local Ollama (`/api/models/ollama`) with 1-click model pulling (`/api/models/ollama/pull`) and local model running.
+    - Updated Kubernetes manifest generation in `OneClickDeployer` to include multi-instance distribution (`replicas: 2`, `podAntiAffinity` across nodes) and `HorizontalPodAutoscaler` (`autoscaling/v2`) targeting CPU (75%) and memory (80%).
+    - Added `generate_docker_compose` producing multi-replica Docker Compose configurations with health checks and restart policies.
+    - Upgraded deployment modal with a toggle between Kubernetes (HPA Auto-Scaling) and Docker Compose (Multi-Replica).
+  - **Sensors Calibration & Unit Scaling Fix**:
+    - Corrected Linux `hwmon` sysfs unit conversions: scaled millivolts to Volts (5000 mV -> 5.0 V) and microwatts to Watts (2270000 uW -> 2.27 W).
+    - Added derived real-time current calculation ($I = P/V$) yielding accurate Amperes (e.g. 0.60 A) for battery/power rails.
+    - Added dedicated unit formatting in the UI sensor table.
+  - **Incident Dismissal & Database Cleansing**:
+    - Purged stale historical demo incidents from `data/aegis.db` and `data/client_server.db`.
+    - Added `DELETE /api/incidents/{id}` and `POST /api/incidents/clear-all` endpoints with UI "Dismiss" and "Clear All" action buttons.
+  - **Real-Time Auto-Refresh & Reactive SSE Synchronization**:
+    - Added automatic periodic background polling (`pollActiveTab()`) for the currently active operational tab.
+    - Added reactive SSE listeners for cluster, incident, and model events, immediately updating the cluster mesh table and badges without requiring manual clicks or page reloads.
     - Consolidated 9 fragmented navigation tabs into 5 unified high-density operational consoles: `Overview`, `Cluster Mesh`, `AI Models`, `Infrastructure`, and `Incidents & Safety`.
     - Refined typography scale in `aegis/static/styles.css` using an Apple/Linear dark design system (`#090b10` background, `#0f131c` card surfaces, 14px body base, 26px gauge values, 11px uppercase micro-headers).
     - Preserved backward compatibility for all legacy tab references (`workloads`, `hardware`, `policy`, `engineering`, `ai`) via transparent JS tab aliasing.

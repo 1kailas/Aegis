@@ -112,7 +112,9 @@ class SensorRegistry:
                     kind, unit = "fan", "rpm"
                 elif stem.startswith("in"):
                     kind, unit = "voltage", "V"
-                elif stem.startswith("power") or stem.startswith("curr"):
+                elif stem.startswith("curr"):
+                    kind, unit = "current", "A"
+                elif stem.startswith("power"):
                     kind, unit = "power", "W"
                 else:
                     continue
@@ -121,6 +123,25 @@ class SensorRegistry:
                     sid,
                     Sensor(sensor_id=sid, kind=kind, label=label, source="hwmon",
                            source_path=str(entry), unit=unit),
+                )
+
+        # If a hardware chip exposes voltage and power but no dedicated current sensor, derive current (I = P/V)
+        chip_names = {s.sensor_id.split(":")[1].split(".")[0] for s in list(self._sensors.values()) if s.source == "hwmon"}
+        for cname in chip_names:
+            has_voltage = any(s.sensor_id.startswith(f"hwmon:{cname}.in") for s in self._sensors.values())
+            has_power = any(s.sensor_id.startswith(f"hwmon:{cname}.power") for s in self._sensors.values())
+            has_current = any(s.sensor_id.startswith(f"hwmon:{cname}.curr") for s in self._sensors.values())
+            if has_voltage and has_power and not has_current:
+                v_s = next(s for s in self._sensors.values() if s.sensor_id.startswith(f"hwmon:{cname}.in"))
+                p_s = next(s for s in self._sensors.values() if s.sensor_id.startswith(f"hwmon:{cname}.power"))
+                c_sid = f"hwmon:{cname}.curr_calc"
+                self._sensors[c_sid] = Sensor(
+                    sensor_id=c_sid,
+                    kind="current",
+                    label=f"{cname} Current",
+                    source="hwmon_calc",
+                    source_path=f"{v_s.sensor_id}|{p_s.sensor_id}",
+                    unit="A",
                 )
 
     def _discover_nvme(self) -> None:
@@ -176,11 +197,27 @@ class SensorRegistry:
     def read(self, sensor: Sensor) -> Reading:
         if sensor.source in {"hwmon", "nvme"} and sensor.source_path:
             return self._read_sysfs(sensor)
+        if sensor.source == "hwmon_calc" and sensor.kind == "current":
+            return self._read_calculated_current(sensor)
         if sensor.source == "psutil":
             return self._read_psutil(sensor)
         return Reading(sensor=sensor, host_id=self.host_id, ts=time.time(),
                        value=None, validity=Validity.UNAVAILABLE,
                        error=f"unsupported source '{sensor.source}'")
+
+    def _read_calculated_current(self, sensor: Sensor) -> Reading:
+        assert sensor.source_path
+        parts = sensor.source_path.split("|")
+        v_sensor = self._sensors.get(parts[0])
+        p_sensor = self._sensors.get(parts[1]) if len(parts) > 1 else None
+        if not v_sensor or not p_sensor:
+            return _reading(sensor, self.host_id, None, Validity.UNAVAILABLE, "source sensors missing")
+        v_reading = self._read_sysfs(v_sensor)
+        p_reading = self._read_sysfs(p_sensor)
+        if v_reading.value and p_reading.value and v_reading.value > 0.05:
+            amps = round(p_reading.value / v_reading.value, 3)
+            return _reading(sensor, self.host_id, amps, Validity.VALID)
+        return _reading(sensor, self.host_id, 0.0, Validity.VALID)
 
     def read_all(self) -> list[Reading]:
         return [self.read(s) for s in self._sensors.values()]
@@ -203,6 +240,18 @@ class SensorRegistry:
 
         if sensor.kind == "temperature":
             value = upscale_temperature(value)
+        elif sensor.kind == "voltage":
+            # hwmon in*_input is in millivolts (mV); convert to Volts (V)
+            if value > 50.0:
+                value = round(value / 1000.0, 3)
+        elif sensor.kind == "current":
+            # hwmon curr*_input is in milliamps (mA); convert to Amperes (A)
+            if value > 50.0:
+                value = round(value / 1000.0, 3)
+        elif sensor.kind == "power":
+            # hwmon power*_input is in microwatts (uW); convert to Watts (W)
+            if value > 1000.0:
+                value = round(value / 1000000.0, 3)
 
         validity = Validity.VALID
         try:

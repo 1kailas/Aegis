@@ -293,40 +293,39 @@
     <div class="hw-profile" id="aiHardwareProfileBox"></div>
   </div>
 
-  <!-- Recommended Models Grid -->
+  <!-- My Ollama Models (Local Runtime) -->
   <div class="panel">
     <div class="panel-header">
       <div>
-        <div class="panel-title">Optimal &amp; Recommended Models</div>
-        <div class="panel-subtitle">Evaluated for host VRAM and memory bandwidth for optimal tokens/sec</div>
+        <div class="panel-title">My Ollama Models (Local Store)</div>
+        <div class="panel-subtitle" id="ollamaStatusSubtitle">Connecting to local Ollama runtime on http://127.0.0.1:11434...</div>
       </div>
-      <span class="badge ok">100% Hardware Fit</span>
+      <div class="flex gap-8 items-center">
+        <input type="text" id="pullModelInput" placeholder="Model tag (e.g. llama3.2, mistral)" class="search-input" style="width:200px; font-size:12px;" />
+        <button class="btn sm primary" id="pullModelBtn" onclick="pullOllamaModel()">Pull Model</button>
+        <button class="btn sm" onclick="refreshOllamaModels()">Refresh Ollama</button>
+      </div>
     </div>
     <div class="panel-body">
-      <div class="grid-auto" id="bestModelsList"></div>
+      <div class="grid-auto" id="ollamaModelsList"></div>
     </div>
   </div>
 
-  <!-- Marginal & Incompatible Models -->
-  <div class="grid-2">
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">Marginal Models (System RAM Spilling)</div>
-        <span class="badge warn">Latency Penalty</span>
+  <!-- Open-Source Model Catalog & Deployer -->
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Model Catalog &amp; Multi-Instance Cloud-Native Deployer</div>
+        <div class="panel-subtitle">Deploy any model with automated multi-instance replica distribution and Kubernetes HPA auto-scaling</div>
       </div>
-      <div class="panel-body">
-        <div style="display:flex; flex-direction:column; gap:8px;" id="marginalModelsList"></div>
-      </div>
+      <span class="badge ok">Auto-Scaling Ready</span>
     </div>
-
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">Incompatible Models (OOM Risk)</div>
-        <span class="badge crit">High Crash Risk</span>
-      </div>
-      <div class="panel-body">
-        <div style="display:flex; flex-direction:column; gap:8px;" id="worstModelsList"></div>
-      </div>
+    <div class="panel-body">
+      <div class="grid-auto" id="catalogModelsList"></div>
+      <!-- Backward compatibility hidden placeholders -->
+      <div style="display:none;" id="bestModelsList"></div>
+      <div style="display:none;" id="marginalModelsList"></div>
+      <div style="display:none;" id="worstModelsList"></div>
     </div>
   </div>
 
@@ -505,6 +504,7 @@
           <button class="filter-btn" data-filter="RESOLVED">Resolved</button>
         </div>
         <button class="btn sm" id="refreshIncidentsBtn">Refresh</button>
+        <button class="btn sm danger" onclick="clearAllIncidents()">Clear All</button>
       </div>
     </div>
     <div class="tbl-wrap">
@@ -602,19 +602,24 @@
      MODALS
 ═══════════════════════════════════════════════════════════ -->
 
-<!-- Kubernetes Manifest Modal -->
+<!-- Manifest Modal (Kubernetes Auto-Scaling & Docker Compose) -->
 <div class="modal-backdrop" id="manifestModal">
   <div class="modal wide">
     <div class="modal-header">
-      <h2 id="manifestModalTitle">Kubernetes Production Manifest</h2>
+      <h2 id="manifestModalTitle">Cloud Native Deployment Manifest</h2>
       <button class="btn sm icon" id="closeManifestModalBtn" aria-label="Close">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </div>
     <div class="modal-body">
-      <div class="flex items-center justify-between" style="margin-bottom:12px;">
-        <span class="text-xs text-muted">Apply directly to your cluster via <code>kubectl apply -f -</code></span>
-        <button class="btn sm primary" id="copyManifestBtn">Copy Manifest YAML</button>
+      <div class="flex items-center justify-between" style="margin-bottom:12px; gap:8px; flex-wrap:wrap;">
+        <div class="filter-bar" id="manifestTypeGroup">
+          <button class="filter-btn active" id="manifestK8sBtn" onclick="switchManifestTab('k8s')">Kubernetes (HPA Auto-Scaling &amp; Multi-Instance)</button>
+          <button class="filter-btn" id="manifestComposeBtn" onclick="switchManifestTab('compose')">Docker Compose (Multi-Replica)</button>
+        </div>
+        <div class="flex gap-8">
+          <button class="btn sm primary" id="copyManifestBtn">Copy Manifest YAML</button>
+        </div>
       </div>
       <pre class="log-box" id="manifestModalContent" style="height:420px;"></pre>
     </div>
