@@ -415,6 +415,125 @@ def cmd_estop(client: httpx.Client, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_models(client: httpx.Client, args: argparse.Namespace) -> int:
+    """Manages AI model recommendations and one-click cloud native deployments."""
+    sub = getattr(args, "models_action", None) or "recommend"
+
+    if sub == "recommend":
+        task = getattr(args, "task", None)
+        params: dict[str, Any] = {"task": task} if task else {}
+        try:
+            r = client.get("/api/models/recommendations", params=params)
+            if r.status_code != 200:
+                print(f"{RED}Error:{RESET} {r.text}")
+                return 1
+            data = r.json()
+        except Exception as e:
+            print(f"{RED}Error connecting to server:{RESET} {e}")
+            return 1
+
+        prof = data.get("hardware_profile", {})
+        print(f"\n{BOLD}⛨ AI Hardware Assessment:{RESET}")
+        print(f"  VRAM:       {prof.get('total_vram_gb', 0):.1f} GB ({', '.join(prof.get('gpu_names') or ['No discrete GPU'])})")
+        print(f"  System RAM: {prof.get('total_ram_gb', 0):.1f} GB  |  CPU Cores: {prof.get('cpu_cores')}")
+        print("─" * 98)
+
+        print(f"{BOLD}{'MODEL':<24} {'TASK':<12} {'VRAM REQ':<10} {'RAM REQ':<10} {'FIT TIER':<14} {'SCORE':<8} {'EST. TPS'}{RESET}")
+        print("─" * 98)
+
+        all_models = data.get("all_ranked", [])
+        for m in all_models:
+            spec = m.get("model", {})
+            name = spec.get("name", "")
+            task_str = spec.get("task", "")
+            vram_req = f"{spec.get('vram_required_gb', 0):.1f} GB"
+            ram_req = f"{spec.get('ram_required_gb', 0):.1f} GB"
+            tier = m.get("fit_tier", "")
+            score = f"{m.get('fit_score', 0)}/100"
+            tps = f"~{m.get('estimated_tokens_per_sec', 0):.0f} t/s"
+
+            if tier in ("OPTIMAL", "GOOD"):
+                tier_str = f"{GREEN}{tier}{RESET}"
+            elif tier == "MARGINAL":
+                tier_str = f"{YELLOW}{tier}{RESET}"
+            else:
+                tier_str = f"{RED}{tier}{RESET}"
+
+            print(f"{name:<24} {task_str:<12} {vram_req:<10} {ram_req:<10} {tier_str:<23} {score:<8} {tps}")
+
+        print(f"\n{BOLD}Top Recommended Models for this Hardware:{RESET}")
+        top_picks = data.get("top_picks_by_task", {})
+        for task_name, pick in top_picks.items():
+            mod = pick.get("model", {})
+            print(f"  {CYAN}{task_name:<12}{RESET} -> {BOLD}{mod.get('name')}{RESET} ({pick.get('fit_tier')}, {pick.get('fit_score')}/100)")
+            for r in pick.get("reasons", [])[:1]:
+                print(f"    {DIM}✔ {r}{RESET}")
+            for w in pick.get("warnings", [])[:1]:
+                print(f"    {YELLOW}⚠ {w}{RESET}")
+
+        print(f"\n{DIM}Run 'aegis models deploy <model_name> --runtime docker' to launch in one click.{RESET}\n")
+        return 0
+
+    elif sub == "deploy":
+        if not getattr(args, "model_name", None):
+            print(f"{RED}Error:{RESET} model_name required (e.g. qwen2.5-coder:7b)")
+            return 1
+        runtime = getattr(args, "runtime", "docker") or "docker"
+        port = getattr(args, "port", 11434) or 11434
+        no_gpu = getattr(args, "no_gpu", False)
+        print(f"Deploying {BOLD}{args.model_name}{RESET} to {CYAN}{runtime}{RESET} on port {port}...")
+        try:
+            r = client.post("/api/models/deploy", json={
+                "model_name": args.model_name,
+                "runtime": runtime,
+                "port": port,
+                "gpu": not no_gpu,
+            })
+            if r.status_code == 200:
+                res = r.json()
+                print(f"{GREEN}✔ Deployment Created ({res.get('status')}):{RESET}")
+                print(f"  Deployment ID: {res.get('deployment_id')}")
+                print(f"  Target:        {res.get('target')}")
+                print(f"  Port:          {res.get('port')}")
+                if res.get("manifest"):
+                    print(f"\n{BOLD}Manifest / Command:{RESET}\n{DIM}{res.get('manifest')}{RESET}")
+                return 0
+            else:
+                print(f"{RED}Deployment failed (HTTP {r.status_code}):{RESET} {r.text}")
+                return 1
+        except Exception as e:
+            print(f"{RED}Error:{RESET} {e}")
+            return 1
+
+    elif sub == "list":
+        try:
+            r = client.get("/api/models/deployments")
+            if r.status_code != 200:
+                print(f"{RED}Error:{RESET} {r.text}")
+                return 1
+            deps = r.json()
+        except Exception as e:
+            print(f"{RED}Error:{RESET} {e}")
+            return 1
+
+        print(f"\n{BOLD}{'DEPLOYMENT ID':<30} {'MODEL':<22} {'RUNTIME':<10} {'STATUS':<14} {'PORT'}{RESET}")
+        print("─" * 86)
+        if not deps:
+            print(f"{DIM}No model deployments active.{RESET}\n")
+            return 0
+        for d in deps:
+            did = d.get("deployment_id", "")
+            mod = d.get("model_name", "")
+            rt = d.get("runtime", "")
+            st = fmt_status(d.get("status", "UNKNOWN"))
+            p = str(d.get("port", ""))
+            print(f"{did:<30} {mod:<22} {rt:<10} {st:<23} {p}")
+        print(f"\nTotal: {len(deps)} deployment(s)\n")
+        return 0
+
+    return 0
+
+
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(
         prog="aegis",
@@ -509,6 +628,18 @@ def main(argv: list[str] | None = None) -> None:
     p_estop = sub.add_parser("estop", help="Query or toggle emergency stop")
     p_estop.add_argument("state", nargs="?", choices=["on", "off", "enable", "disable"])
 
+    # aegis models (v3.0)
+    p_models = sub.add_parser("models", help="AI model recommendations & one-click deployments")
+    sub_models = p_models.add_subparsers(dest="models_action")
+    p_rec = sub_models.add_parser("recommend", help="Analyze hardware & recommend best/worst models")
+    p_rec.add_argument("--task", choices=["CODING", "REASONING", "FAST_CHAT", "EMBEDDING"])
+    p_dep = sub_models.add_parser("deploy", help="One-click deploy a model to Docker or Kubernetes")
+    p_dep.add_argument("model_name", help="Model name (e.g. qwen2.5-coder:7b)")
+    p_dep.add_argument("--runtime", "-r", default="docker", choices=["docker", "k8s"])
+    p_dep.add_argument("--port", "-p", type=int, default=11434)
+    p_dep.add_argument("--no-gpu", action="store_true")
+    sub_models.add_parser("list", help="List active model deployments")
+
     args = p.parse_args(argv)
 
     if not args.subcommand:
@@ -563,6 +694,8 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(cmd_mode(client, args))
     elif args.subcommand == "estop":
         sys.exit(cmd_estop(client, args))
+    elif args.subcommand == "models":
+        sys.exit(cmd_models(client, args))
 
 
 if __name__ == "__main__":

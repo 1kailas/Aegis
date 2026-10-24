@@ -36,9 +36,11 @@ from aegis.engineering.recovery_verifier import RecoveryVerifier
 from aegis.engineering.workspace import IsolatedWorkspaceManager
 from aegis.intelligence.diagnosis import IncidentDiagnoser
 from aegis.intelligence.forecasting import TelemetryForecaster
+from aegis.intelligence.model_recommender import ModelRecommender
 from aegis.notifications.dispatcher import NotificationDispatcher
 from aegis.orchestration.ai_workloads import AIWorkloadMonitor
 from aegis.orchestration.dependency_graph import DependencyGraph
+from aegis.orchestration.deployer import OneClickDeployer
 from aegis.orchestration.docker_adapter import DockerAdapter
 from aegis.orchestration.k8s_adapter import KubernetesAdapter
 from aegis.orchestration.probers import SyntheticProber
@@ -187,6 +189,13 @@ class AppContext:
         self.canary = CanaryVerificationEngine(self.db, self.events)
         self.dispatcher = NotificationDispatcher(self.db, self.events)
         self.rbac = RBACManager(self.db)
+        self.models = ModelRecommender()
+        self.deployer = OneClickDeployer(
+            db=self.db,
+            events=self.events,
+            docker_adapter=self.docker,
+            k8s_adapter=self.k8s,
+        )
         self.engine: MonitoringEngine | None = None  # set after construction
 
     # -- guardian bookkeeping ---------------------------------------------

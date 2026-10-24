@@ -1,8 +1,8 @@
 # Aegis AI — Autonomous Infrastructure Monitoring & Engineering Platform
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Version: 2.0.0](https://img.shields.io/badge/version-2.0.0-blue.svg)]()
-[![Tests Passing](https://img.shields.io/badge/tests-58%2F58%20passed-brightgreen.svg)]()
+[![Version: 3.0.0](https://img.shields.io/badge/version-3.0.0-blue.svg)]()
+[![Tests Passing](https://img.shields.io/badge/tests-63%2F63%20passed-brightgreen.svg)]()
 [![Prometheus Ready](https://img.shields.io/badge/prometheus-%2Fmetrics-orange.svg)]()
 [![Security: Hardened](https://img.shields.io/badge/security-hardened-blue.svg)](SECURITY.md)
 [![Agents: Devin Protocol](https://img.shields.io/badge/agents-Devin%20protocol-purple.svg)](AGENTS.md)
@@ -26,6 +26,7 @@ Aegis AI is a production-minded autonomous infrastructure monitoring and enginee
   - [Phase 5: Unified Web Dashboard & Operational Readiness](#phase-5-unified-web-dashboard--operational-readiness)
   - [Aegis 1.5: Predictive Forecasting, Closed-Loop Autonomy & Observability](#aegis-15-predictive-forecasting-closed-loop-autonomy--observability)
   - [Aegis 2.0: Distributed Cluster Mesh, Canary Rollbacks & RBAC](#aegis-20-distributed-cluster-mesh-canary-rollbacks--rbac)
+  - [Aegis 3.0: Model Optimization Engine & One-Click Cloud Native Deployer](#aegis-30-model-optimization-engine--one-click-cloud-native-deployer)
 - [Non-Negotiable Principles](#non-negotiable-principles)
 - [Installation & Quick Start](#installation--quick-start)
 - [Configuration Reference](#configuration-reference)
@@ -186,6 +187,32 @@ Traditional monitoring alerts humans when systems fail. Traditional autonomous a
 - **Cluster Mesh Dashboard Tab**:
   - Dedicated real-time view of all registered nodes, IP addresses, statuses, and active canary rollouts.
 
+### Aegis 3.0: Model Optimization Engine & One-Click Cloud Native Deployer
+- **Hardware-Aware Model Intelligence Engine (`model_recommender.py`)**:
+  - Profiles real-time compute hardware (VRAM, system RAM, CPU cores, GPU architectures).
+  - Evaluates an extensive open-source model catalog across 4 specialized task categories: Coding, Reasoning, Fast Chat, and Embeddings (Qwen 2.5 Coder, DeepSeek R1, Llama 3.3, Mistral, Phi-4, Gemma 2, Nomic).
+  - Automatically categorizes models into four deterministic fit tiers:
+    - **`OPTIMAL`**: 100% GPU offload, peak tokens/second, and ample KV cache headroom for 32k contexts.
+    - **`GOOD`**: Fully fits in VRAM for standard context (4k-8k tokens).
+    - **`MARGINAL`**: Exceeds physical VRAM; requires partial CPU layer offload with noticeable latency drop.
+    - **`INCOMPATIBLE`**: High risk of CUDA Out-Of-Memory (OOM) kill or severe system unresponsiveness.
+  - Predicts token generation throughput (tokens/sec) and KV cache memory headroom.
+- **One-Click Cloud Native Deployer (`deployer.py`)**:
+  - Instant one-click provisioning of AI model inference engines to Docker and Kubernetes.
+  - Docker deployment with automated GPU passthrough (`--gpus all`), volume mounting, port allocation, and container lifecycle monitoring.
+  - Kubernetes deployment with production-grade YAML generation: resource requests & limits (`nvidia.com/gpu: 1`), environment configurations, and readiness probes (`/api/tags`).
+  - Persistent deployment tracking and lifecycle management (`model_deployments` table).
+- **Web UI "Model Hub & Deployer" Tab**:
+  - Real-time hardware profile overview (VRAM, System RAM, CPU cores, active GPUs).
+  - Interactive task category filter pills (`ALL`, `CODING`, `REASONING`, `FAST CHAT`, `EMBEDDING`).
+  - Color-coded fit tier badges (`OPTIMAL` green, `GOOD` blue, `MARGINAL` yellow, `INCOMPATIBLE` red).
+  - One-click Docker deployment and Kubernetes YAML manifest inspector modal.
+  - Active model deployment monitor with real-time stop/restart controls.
+- **Developer CLI Model Tooling**:
+  - `aegis models recommend`: Hardware assessment and ranked table of model suitability.
+  - `aegis models deploy <model_name> [--runtime docker|k8s]`: One-click deployment trigger.
+  - `aegis models list`: Real-time status and port bindings of all active model inference containers.
+
 ---
 
 ## Non-Negotiable Principles
@@ -279,6 +306,9 @@ aegis canary rollback <id>     # Instantly abort and rollback an active canary
 aegis keys create -n worker1   # Generate cryptographically hashed RBAC token
 aegis mode [autonomous|approval] # Change operating mode
 aegis estop [on|off]           # Global emergency stop kill-switch
+aegis models recommend         # Hardware profiling & model compatibility assessment
+aegis models deploy <name>     # 1-click Docker or Kubernetes deployment
+aegis models list              # View active model deployments and ports
 ```
 👉 **`http://localhost:8000/docs`**
 
@@ -384,6 +414,12 @@ resources:
 | `/api/notifications/channels` | `GET`, `POST` | Configure Slack / PagerDuty / webhook channels |
 | `/api/notifications/dispatch` | `POST` | Dispatch alert with storm debouncing |
 | `/api/security/keys` | `GET`, `POST` | Generate and list cryptographically hashed RBAC keys |
+| `/api/models/catalog` | `GET` | Complete open-source AI model catalog |
+| `/api/models/recommendations` | `GET` | Hardware-assessed model fit tiers, TPS, & memory headroom |
+| `/api/models/deploy` | `POST` | 1-click model provisioning (Docker or Kubernetes) |
+| `/api/models/deployments` | `GET` | List active model inference deployments |
+| `/api/models/deployments/{id}/stop` | `POST` | Stop active model deployment |
+| `/api/orchestration/manifests/k8s` | `GET`, `POST` | Generate production-grade Kubernetes YAML manifests |
 | `/api/audit` | `GET` | Query immutable audit logs |
 | `/api/events/stream` | `GET` | SSE real-time stream of all platform events |
 
@@ -391,7 +427,7 @@ resources:
 
 ## Running Automated Tests
 
-Aegis includes an exhaustive automated test suite covering all 5 implementation phases plus releases v1.5 and v2.0.
+Aegis includes an exhaustive automated test suite covering all 5 implementation phases plus releases v1.5, v2.0, and v3.0.
 
 ```bash
 # Run the full test suite
@@ -407,5 +443,6 @@ PYTHONPATH=. .venv/bin/pytest tests/ -v
 - **`tests/test_v15.py` (5 tests)**: Predictive telemetry forecasting (OLS linear regression & TTE calculations), closed-loop autonomous self-healing engine (triage, auto-remediation, and dead-letter escalation), synthetic HTTP/TCP probers, Prometheus metrics exposition line protocol, and v1.5 API endpoints.
 - **`tests/test_v20.py` (5 tests)**: Distributed cluster mesh node lifecycle and draining, automated canary verification and closed-loop rollbacks, multi-channel webhook alert storm debouncing, cryptographic RBAC token generation & permission enforcement, and v2.0 API routes.
 - **`tests/test_client_and_cli.py` (7 tests)**: Aegis Agent host telemetry & capacity sampling, cluster mesh registration and authenticated heartbeats, graceful node draining on shutdown, unified `aegis` CLI subcommands (`status`, `nodes`, `incidents`, `canary`, `keys`, `mode`, `estop`, `join`), `normalize_server_url` IP parsing, and server distribution endpoints (`/agent.py`, `/install.sh`, `/api/cluster/join-info`).
+- **`tests/test_v30.py` (5 tests)**: AI model intelligence recommender (hardware profiling, fit tiers across 24GB GPU, 8GB GPU, and CPU-only hosts, task filtering, token throughput estimation), one-click Docker and Kubernetes deployer, manifest generation with GPU requests & readiness probes, persistent deployment lifecycle, and developer CLI `aegis models` commands.
 
-**Result: 58 passed in 9.2 seconds.**
+**Result: 63 passed in ~9.5 seconds.**

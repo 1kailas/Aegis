@@ -6,4 +6,4 @@ validated diagnosis -> remediation -> repository-repair -> PR workflow
 using two small local models with optional, strictly budgeted cloud help.
 """
 
-__version__ = "2.0.0"
+__version__ = "3.0.0"

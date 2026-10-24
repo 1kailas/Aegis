@@ -62,7 +62,7 @@ function fallbackCopy(text) {
 }
 
 // ------------------------------------------------------------- Navigation & Shortcuts
-const TABS = ["overview", "cluster", "workloads", "incidents", "hardware", "ai", "engineering", "policy"];
+const TABS = ["overview", "cluster", "models", "workloads", "incidents", "hardware", "ai", "engineering", "policy"];
 
 window.switchTab = function(tabName) {
   document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
@@ -75,6 +75,7 @@ window.switchTab = function(tabName) {
   if (target) target.classList.add("active");
 
   if (tabName === "cluster") refreshCluster();
+  if (tabName === "models") refreshModels();
   if (tabName === "workloads") refreshDocker();
   if (tabName === "incidents") refreshIncidents();
   if (tabName === "ai") refreshAI();
@@ -503,6 +504,168 @@ function setupClusterJoinCommands() {
 
 const rcb = $("refreshClusterBtn");
 if (rcb) rcb.addEventListener("click", refreshCluster);
+
+// ------------------------------------------------------------- AI Model Hub & Deployer (v3.0)
+let currentModelTaskFilter = "ALL";
+
+async function refreshModels() {
+  try {
+    const taskParam = currentModelTaskFilter !== "ALL" ? `?task=${currentModelTaskFilter}` : "";
+    const res = await (await fetch(`/api/models/recommendations${taskParam}`)).json();
+    const prof = res.hardware_profile || {};
+
+    // 1. Hardware profile banner
+    const gpus = (prof.gpu_names || []).join(", ") || "No discrete GPU detected (CPU mode)";
+    $("aiHardwareProfileBox").innerHTML = `
+      <div><strong>Acceleration:</strong> ${prof.has_gpu ? `<span class="badge ok">GPU ACCELERATED</span>` : `<span class="badge warn">CPU INFERENCE</span>`} · ${gpus}</div>
+      <div style="margin-top:2px;"><strong>VRAM Capacity:</strong> <span style="font-family:var(--font-mono); color:var(--text-bright);">${prof.total_vram_gb} GB</span> | <strong>System RAM:</strong> ${prof.total_ram_gb} GB | <strong>CPU:</strong> ${prof.cpu_cores} cores</div>
+    `;
+
+    // 2. Best Models List
+    const best = res.best_models || [];
+    $("bestModelsList").innerHTML = best.length ? best.map(m => {
+      const s = m.model;
+      return `
+        <div class="card" style="border-top:3px solid var(--ok);">
+          <div class="card-header">
+            <h3>${s.display_name}</h3>
+            <span class="badge ok">${m.fit_tier} (${m.fit_score}/100)</span>
+          </div>
+          <div style="font-size:0.75rem; color:var(--muted); margin:4px 0;">
+            Task: <span class="badge info">${s.task}</span> · Params: ${s.parameters_b}B · Quant: <code>${s.quantization}</code>
+          </div>
+          <div style="font-size:0.8rem; margin:6px 0; color:var(--text-bright);">
+            ⚡ Est. Throughput: <strong>~${m.estimated_tokens_per_sec} tokens/s</strong> (VRAM: ${s.vram_required_gb} GB)
+          </div>
+          <div style="font-size:0.75rem; color:var(--dim); line-height:1.4; margin-bottom:10px;">
+            ${(m.reasons || []).map(r => `<div>✔ ${r}</div>`).join("")}
+          </div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:auto;">
+            <button class="btn sm primary" onclick="deployModel('${s.name}', 'docker')">1-Click Docker</button>
+            <button class="btn sm" onclick="deployModel('${s.name}', 'k8s')">1-Click K8s</button>
+            <button class="btn sm" onclick="viewK8sManifest('${s.name}')">View K8s YAML</button>
+          </div>
+        </div>
+      `;
+    }).join("") : `<div style="color:var(--muted); padding:12px;">No optimal models found for this hardware.</div>`;
+
+    // 3. Marginal Models
+    const marginal = res.marginal_models || [];
+    $("marginalModelsList").innerHTML = marginal.length ? marginal.map(m => {
+      const s = m.model;
+      return `
+        <div style="background:var(--card); border:1px solid var(--line); border-left:3px solid var(--warn); border-radius:5px; padding:10px 14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong>${s.display_name}</strong>
+            <span class="badge warn">${m.fit_tier}</span>
+          </div>
+          <div style="font-size:0.75rem; color:var(--muted); margin:4px 0;">
+            Requires ${s.vram_required_gb} GB VRAM · ~${m.offload_layers_percent}% on GPU / Spills to RAM
+          </div>
+          <div style="font-size:0.75rem; color:var(--warn); margin:4px 0;">
+            ${(m.warnings || []).join(" ")}
+          </div>
+          <div style="display:flex; gap:6px; margin-top:6px;">
+            <button class="btn sm" onclick="deployModel('${s.name}', 'docker')">Deploy Docker</button>
+            <button class="btn sm" onclick="deployModel('${s.name}', 'k8s')">Deploy K8s</button>
+          </div>
+        </div>
+      `;
+    }).join("") : `<div style="color:var(--muted); font-size:0.8rem; padding:8px;">None</div>`;
+
+    // 4. Worst Models
+    const worst = res.worst_models || [];
+    $("worstModelsList").innerHTML = worst.length ? worst.map(m => {
+      const s = m.model;
+      return `
+        <div style="background:var(--card); border:1px solid var(--line); border-left:3px solid var(--crit); border-radius:5px; padding:10px 14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong>${s.display_name}</strong>
+            <span class="badge crit">${m.fit_tier}</span>
+          </div>
+          <div style="font-size:0.75rem; color:var(--crit); margin-top:4px;">
+            ${(m.warnings || []).join(" ")}
+          </div>
+        </div>
+      `;
+    }).join("") : `<div style="color:var(--muted); font-size:0.8rem; padding:8px;">None</div>`;
+
+    // 5. Active Deployments
+    const deps = await (await fetch("/api/models/deployments")).json();
+    const dtb = $("deploymentsTbl").querySelector("tbody");
+    if (!deps.length) {
+      dtb.innerHTML = `<tr><td colspan="7" style="color:var(--muted); text-align:center; padding:14px;">No active deployments. Click "1-Click Docker" or "1-Click K8s" on any model above to launch.</td></tr>`;
+    } else {
+      dtb.innerHTML = deps.map(d => {
+        const isRunning = d.status === "RUNNING";
+        const bClass = isRunning ? "ok" : d.status === "CONFIGURED" ? "info" : "crit";
+        return `
+          <tr>
+            <td><code>${d.deployment_id}</code></td>
+            <td><strong>${d.model_name}</strong></td>
+            <td><span class="badge info">${d.runtime.toUpperCase()}</span></td>
+            <td><span class="badge ${bClass}">${d.status}</span></td>
+            <td>:${d.port}</td>
+            <td><code>${(d.target || "").substring(0, 32)}</code></td>
+            <td>
+              ${isRunning ? `<button class="btn sm danger" onclick="stopDeployment('${d.deployment_id}')">Stop</button>` : `<span style="font-size:0.75rem; color:var(--muted);">${d.status}</span>`}
+            </td>
+          </tr>
+        `;
+      }).join("");
+    }
+  } catch {}
+}
+
+window.deployModel = async function(modelName, runtime = "docker") {
+  showToast(`Deploying ${modelName} to ${runtime}...`, "info");
+  try {
+    const res = await (await fetch("/api/models/deploy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model_name: modelName, runtime: runtime })
+    })).json();
+    showToast(`Successfully deployed ${modelName} (${res.status})`, "ok");
+    refreshModels();
+  } catch (e) {
+    showToast(`Deployment error: ${e}`, "crit");
+  }
+};
+
+window.viewK8sManifest = async function(modelName) {
+  try {
+    const res = await (await fetch(`/api/orchestration/manifests/k8s?model_name=${modelName}`)).json();
+    $("manifestModalTitle").textContent = `Kubernetes Manifest: ${modelName}`;
+    $("manifestModalContent").textContent = res.manifest_yaml;
+    $("manifestModal").style.display = "flex";
+  } catch (e) {
+    showToast(`Error generating manifest: ${e}`, "crit");
+  }
+};
+
+window.stopDeployment = async function(depId) {
+  if (!confirm(`Stop deployment ${depId}?`)) return;
+  try {
+    await fetch(`/api/models/deployments/${depId}/stop`, { method: "POST" });
+    showToast(`Stopped ${depId}`, "warn");
+    refreshModels();
+  } catch (e) {
+    showToast(`Error stopping: ${e}`, "crit");
+  }
+};
+
+$("closeManifestModalBtn")?.addEventListener("click", () => { $("manifestModal").style.display = "none"; });
+$("copyManifestBtn")?.addEventListener("click", () => { copySnippet($("manifestModalContent").textContent); });
+$("refreshModelsBtn")?.addEventListener("click", refreshModels);
+
+document.querySelectorAll("#modelTaskFilterGroup .filter-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#modelTaskFilterGroup .filter-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentModelTaskFilter = btn.dataset.filter;
+    refreshModels();
+  });
+});
 
 // ------------------------------------------------------------- Docker & Workloads Tab
 async function refreshDocker() {

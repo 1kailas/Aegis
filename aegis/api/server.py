@@ -737,6 +737,96 @@ def create_app(ctx: AppContext) -> FastAPI:
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
 
+    # ------------------------------------------------------------- AI Models & Deployer (v3.0)
+    @app.get("/api/models/recommendations")
+    def model_recommendations(task: str | None = None) -> dict[str, Any]:
+        snap = ctx.snapshot()
+        gpu_data = ctx.gpu.sample()
+        profile = ctx.models.extract_profile(snap, gpu_data)
+        return ctx.models.get_recommendations(profile, task=task)
+
+    @app.get("/api/models/catalog")
+    def model_catalog() -> list[dict[str, Any]]:
+        return [m.as_dict() for m in ctx.models.catalog]
+
+    @app.post("/api/models/deploy", dependencies=[Depends(_auth_dp(ctx))])
+    def model_deploy(payload: dict[str, Any]) -> dict[str, Any]:
+        model_name = payload.get("model_name")
+        if not model_name:
+            raise HTTPException(status_code=422, detail="model_name required")
+        runtime = payload.get("runtime", "docker").lower()
+        port = int(payload.get("port", 11434))
+        gpu = bool(payload.get("gpu", True))
+
+        if runtime == "docker":
+            return ctx.deployer.deploy_docker(model_name=model_name, port=port, gpu=gpu)
+        elif runtime in ("k8s", "kubernetes"):
+            namespace = payload.get("namespace", "default")
+            replicas = int(payload.get("replicas", 1))
+            return ctx.deployer.deploy_k8s(
+                model_name=model_name,
+                namespace=namespace,
+                port=port,
+                gpu=gpu,
+                replicas=replicas,
+            )
+        else:
+            raise HTTPException(status_code=422, detail=f"Unsupported runtime '{runtime}'; must be 'docker' or 'k8s'")
+
+    @app.get("/api/models/deployments")
+    def list_model_deployments(limit: int = 50) -> list[dict[str, Any]]:
+        return ctx.deployer.list_deployments(limit=limit)
+
+    @app.post("/api/models/deployments/{deployment_id}/stop", dependencies=[Depends(_auth_dp(ctx))])
+    def stop_model_deployment(deployment_id: str) -> dict[str, Any]:
+        ok = ctx.deployer.stop_deployment(deployment_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Deployment not found")
+        return {"stopped": True, "status": "stopped", "deployment_id": deployment_id}
+
+    @app.post("/api/orchestration/deploy/docker", dependencies=[Depends(_auth_dp(ctx))])
+    def orchestration_deploy_docker(payload: dict[str, Any]) -> dict[str, Any]:
+        model_name = payload.get("model_name", "qwen2.5-coder:7b")
+        port = int(payload.get("port", 11434))
+        gpu = bool(payload.get("gpu", True))
+        return ctx.deployer.deploy_docker(model_name=model_name, port=port, gpu=gpu)
+
+    @app.post("/api/orchestration/deploy/k8s", dependencies=[Depends(_auth_dp(ctx))])
+    def orchestration_deploy_k8s(payload: dict[str, Any]) -> dict[str, Any]:
+        model_name = payload.get("model_name", "qwen2.5-coder:7b")
+        namespace = payload.get("namespace", "default")
+        port = int(payload.get("port", 11434))
+        gpu = bool(payload.get("gpu", True))
+        replicas = int(payload.get("replicas", 1))
+        return ctx.deployer.deploy_k8s(
+            model_name=model_name,
+            namespace=namespace,
+            port=port,
+            gpu=gpu,
+            replicas=replicas,
+        )
+
+    @app.get("/api/orchestration/manifests/k8s")
+    def get_k8s_manifest(model_name: str = "qwen2.5-coder:7b", namespace: str = "default", port: int = 11434, gpu: bool = True) -> dict[str, Any]:
+        yaml_content = ctx.deployer.generate_k8s_manifest(model_name=model_name, namespace=namespace, port=port, gpu=gpu)
+        return {"model_name": model_name, "namespace": namespace, "manifest_yaml": yaml_content, "yaml": yaml_content}
+
+    @app.post("/api/orchestration/manifests/k8s")
+    def post_k8s_manifest(payload: dict[str, Any]) -> dict[str, Any]:
+        model_name = payload.get("model_name", "qwen2.5-coder:7b")
+        namespace = payload.get("namespace", "default")
+        port = int(payload.get("port", 11434))
+        gpu = bool(payload.get("gpu", True))
+        replicas = int(payload.get("replicas", 1))
+        yaml_content = ctx.deployer.generate_k8s_manifest(
+            model_name=model_name,
+            namespace=namespace,
+            port=port,
+            gpu=gpu,
+            replicas=replicas,
+        )
+        return {"model_name": model_name, "namespace": namespace, "manifest_yaml": yaml_content, "yaml": yaml_content}
+
     # ------------------------------------------------------------ policy & demo
     @app.post("/api/policy/mode", dependencies=[Depends(_auth_dp(ctx))])
     def set_mode(req: ModeRequest) -> dict[str, str]:
