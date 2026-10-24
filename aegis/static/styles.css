@@ -1104,3 +1104,44 @@ footer a:hover { color: var(--text-primary); }
 .target-card:hover {
   border-color: var(--border-hover);
 }
+
+/* ═══════════════════════════════════════════════════════════
+   SECURITY, RBAC & API KEY TOPOLOGY GRAPH
+═══════════════════════════════════════════════════════════ */
+.key-graph-wrap {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  overflow: hidden;
+}
+.scope-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.key-inspector-card {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+.key-inspector-card:hover {
+  border-color: var(--border-hover);
+}
+.troubleshoot-box {
+  background: rgba(15, 23, 42, 0.7);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 6px 6px 0;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}

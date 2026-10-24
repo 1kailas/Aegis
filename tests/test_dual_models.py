@@ -162,3 +162,57 @@ def test_self_healing_handles_hardware_scaling(app_ctx: AppContext):
     # Verify incident contained
     updated = app_ctx.incidents.get(inc["id"])
     assert updated["state"] == "CONTAINED"
+
+
+def test_security_key_topology_graph_endpoint(app_ctx: AppContext):
+    """Verify GET /api/security/graph returns full node/edge topology and summary metrics."""
+    app = create_app(app_ctx)
+    client = TestClient(app)
+
+    res = client.get("/api/security/graph")
+    assert res.status_code == 200
+    data = res.json()
+    assert "nodes" in data
+    assert "edges" in data
+    assert "summary" in data
+
+    # Check node categories
+    node_ids = [n["id"] for n in data["nodes"]]
+    assert "hub-core" in node_ids
+    assert "key-gemini" in node_ids
+    assert "key-devin" in node_ids
+    assert "key-github" in node_ids
+    assert "key-ollama" in node_ids
+
+    # Check summary metrics
+    summary = data["summary"]
+    assert summary["total_keys"] >= 4
+    assert summary["cloud_ai_count"] >= 2
+    assert "healthy" in summary
+
+
+def test_security_test_key_endpoint(app_ctx: AppContext):
+    """Verify POST /api/security/test-key tests live connectivity and measures latency."""
+    app = create_app(app_ctx)
+    client = TestClient(app)
+
+    # 1. Test Ollama
+    r_ollama = client.post("/api/security/test-key", json={"node_id": "key-ollama"})
+    assert r_ollama.status_code == 200
+    d_ollama = r_ollama.json()
+    assert "latency_ms" in d_ollama
+    assert "status" in d_ollama
+
+    # 2. Test GitHub
+    r_gh = client.post("/api/security/test-key", json={"node_id": "key-github"})
+    assert r_gh.status_code == 200
+    d_gh = r_gh.json()
+    assert d_gh["success"] is True
+
+    # 3. Test RBAC Key
+    r_rbac = client.post("/api/security/test-key", json={"node_id": "key-rbac-dev"})
+    assert r_rbac.status_code == 200
+    d_rbac = r_rbac.json()
+    assert d_rbac["success"] is True
+    assert d_rbac["status"] == "VERIFIED"
+

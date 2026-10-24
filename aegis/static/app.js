@@ -1636,13 +1636,8 @@ async function refreshAudit() {
       `).join("");
     }
 
-    const keys = await (await fetch("/api/security/keys")).json();
-    const keysTbl = $("apiKeysTbl")?.querySelector("tbody");
-    if (keysTbl) {
-      keysTbl.innerHTML = keys.length ?
-        keys.map(k => `<tr><td><strong>${k.name}</strong></td><td><span class="badge info">${k.role}</span></td><td><code>${k.key_prefix}</code></td><td>${fmtTime(k.created_at)}</td><td>${fmtRelative(k.last_used_at)}</td></tr>`).join("") :
-        `<tr><td colspan="5" style="color:var(--text-muted); text-align:center; padding:14px;">No API keys generated.</td></tr>`;
-    }
+    // Refresh Key Topology Graph & Keys
+    try { await refreshKeyGraph(); } catch (e) { console.warn("refreshKeyGraph error:", e); }
 
     const demo = await (await fetch("/api/demo")).json();
     if ($("demoBtns")) {
@@ -1687,12 +1682,447 @@ $("createApiKeyBtn")?.addEventListener("click", async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, role: role.toUpperCase() })
     })).json();
-    prompt("API Key generated! Save this secret now:", res.secret_key);
+    prompt("API Key generated! Save this secret now:", res.token || res.secret_key);
     refreshAudit();
   } catch (e) {
     showToast(`Error creating key: ${e}`, "crit");
   }
 });
+
+// ═══════════════════════════════════════════════════════════
+// SECURITY, API KEYS & TOPOLOGY GRAPH CONTROLLER
+// ═══════════════════════════════════════════════════════════
+let keyGraphData = null;
+let selectedKeyNodeId = "key-gemini";
+let keyGraphFilter = "ALL";
+let hoveredKeyNode = null;
+let keyGraphAnimRunning = false;
+
+async function refreshKeyGraph() {
+  try {
+    const res = await fetch("/api/security/graph");
+    if (!res.ok) return;
+    keyGraphData = await res.json();
+
+    // 1. Update KPI Summary Cards
+    const summary = keyGraphData.summary || {};
+    if ($("metricTotalKeys")) $("metricTotalKeys").textContent = summary.total_keys || "0";
+    if ($("metricHealthyKeys")) $("metricHealthyKeys").textContent = summary.healthy || "0";
+    if ($("metricCloudAiKeys")) $("metricCloudAiKeys").textContent = summary.cloud_ai_count || "0";
+    if ($("metricRbacRoles")) $("metricRbacRoles").textContent = summary.rbac_count || "0";
+    if ($("keyGraphTotalBadge")) $("keyGraphTotalBadge").textContent = `${summary.total_keys || 0} Keys Monitored`;
+
+    // 2. Populate Table View
+    const tbody = $("apiKeysTbl")?.querySelector("tbody");
+    if (tbody && keyGraphData.nodes) {
+      const nonHub = keyGraphData.nodes.filter(n => n.id !== "hub-core");
+      tbody.innerHTML = nonHub.map(n => {
+        const badgeClass = n.status === "HEALTHY" ? "ok" : (n.status === "MISSING" ? "crit" : "warn");
+        return `
+          <tr>
+            <td>
+              <div class="flex items-center gap-8">
+                <span style="font-size:16px;">${n.icon || '🔑'}</span>
+                <div>
+                  <strong>${n.label}</strong>
+                  <div class="text-xs text-muted"><code>${n.id}</code></div>
+                </div>
+              </div>
+            </td>
+            <td><span class="badge ${n.color === '#ef4444' ? 'crit' : (n.color === '#f59e0b' ? 'warn' : 'info')}">${n.role || n.type}</span></td>
+            <td><span class="badge" style="font-size:10px;">${n.category.toUpperCase()}</span></td>
+            <td><span class="badge ${badgeClass}">${n.status}</span></td>
+            <td><div class="flex flex-wrap gap-4" style="max-width:240px;">${(n.scopes || []).slice(0, 3).map(s => `<span class="scope-chip">${s}</span>`).join('')}${(n.scopes || []).length > 3 ? `<span class="scope-chip">+${n.scopes.length - 3}</span>` : ''}</div></td>
+            <td><span class="text-xs text-muted">${n.source || '–'}</span></td>
+            <td>
+              <button class="btn sm" onclick="testKeyFromTable('${n.id}')">⚡ Test</button>
+            </td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    // 3. Render Canvas & Inspector
+    renderKeyGraphCanvas();
+    if (selectedKeyNodeId) {
+      renderKeyInspector(selectedKeyNodeId);
+    }
+  } catch (err) {
+    console.warn("refreshKeyGraph error:", err);
+  }
+}
+window.refreshKeyGraph = refreshKeyGraph;
+
+function renderKeyGraphCanvas() {
+  const canvas = $("keyGraphCanvas");
+  if (!canvas || !keyGraphData) return;
+  const ctx = canvas.getContext("2d");
+  const rect = canvas.getBoundingClientRect();
+  const width = rect.width || 600;
+  const height = rect.height || 460;
+
+  // Handle High-DPI screens
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+  ctx.scale(dpr, dpr);
+
+  const hubNode = keyGraphData.nodes.find(n => n.id === "hub-core") || {
+    id: "hub-core", label: "Aegis AI Control Plane", icon: "🛡️", color: "#6366f1"
+  };
+  hubNode.x = width / 2;
+  hubNode.y = height / 2;
+  hubNode.radius = 28;
+
+  // Filter surrounding nodes
+  const surrounding = keyGraphData.nodes.filter(n => n.id !== "hub-core" && (keyGraphFilter === "ALL" || n.category === keyGraphFilter));
+  const count = surrounding.length;
+
+  const rx = Math.min(width * 0.38, 220);
+  const ry = Math.min(height * 0.36, 145);
+
+  surrounding.forEach((node, i) => {
+    const angle = (i * 2 * Math.PI) / count - Math.PI / 2;
+    node.x = hubNode.x + rx * Math.cos(angle);
+    node.y = hubNode.y + ry * Math.sin(angle);
+    node.radius = (node.id === selectedKeyNodeId) ? 23 : 20;
+  });
+
+  function draw() {
+    ctx.clearRect(0, 0, width, height);
+
+    // 1. Draw Edges from Hub to Surrounding Nodes
+    surrounding.forEach((node, i) => {
+      const isSelected = node.id === selectedKeyNodeId;
+      const isHovered = hoveredKeyNode && hoveredKeyNode.id === node.id;
+
+      // Curved Bezier link
+      const cpX = (hubNode.x + node.x) / 2 + (node.y - hubNode.y) * 0.12;
+      const cpY = (hubNode.y + node.y) / 2 - (node.x - hubNode.x) * 0.12;
+
+      ctx.beginPath();
+      ctx.moveTo(hubNode.x, hubNode.y);
+      ctx.quadraticCurveTo(cpX, cpY, node.x, node.y);
+
+      // Line gradient
+      const grad = ctx.createLinearGradient(hubNode.x, hubNode.y, node.x, node.y);
+      grad.addColorStop(0, "rgba(99, 102, 241, 0.45)");
+      grad.addColorStop(1, (node.color || "#38bdf8") + (isSelected || isHovered ? "cc" : "55"));
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = isSelected ? 2.5 : (isHovered ? 2.0 : 1.4);
+      ctx.stroke();
+
+      // Flowing data particle
+      const t = (Date.now() / 2400 + i * (1 / Math.max(1, count))) % 1;
+      const px = (1 - t) * (1 - t) * hubNode.x + 2 * (1 - t) * t * cpX + t * t * node.x;
+      const py = (1 - t) * (1 - t) * hubNode.y + 2 * (1 - t) * t * cpY + t * t * node.y;
+
+      ctx.beginPath();
+      ctx.arc(px, py, isSelected ? 3.0 : 2.2, 0, Math.PI * 2);
+      ctx.fillStyle = node.color || "#38bdf8";
+      ctx.shadowBlur = isSelected ? 10 : 6;
+      ctx.shadowColor = node.color || "#38bdf8";
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    });
+
+    // 2. Draw Surrounding Key Nodes
+    surrounding.forEach(node => {
+      const isSelected = node.id === selectedKeyNodeId;
+      const isHovered = hoveredKeyNode && hoveredKeyNode.id === node.id;
+
+      // Outer Halo Glow
+      const glowColor = node.status === "HEALTHY" ? (node.color || "#38bdf8") : (node.status === "MISSING" ? "#ef4444" : "#f59e0b");
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, node.radius + (isSelected ? 7 : (isHovered ? 5 : 3)), 0, Math.PI * 2);
+      ctx.fillStyle = glowColor + (isSelected ? "33" : "18");
+      ctx.fill();
+
+      // Node Body Circle
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
+      ctx.fillStyle = "#0f131c";
+      ctx.fill();
+      ctx.strokeStyle = isSelected ? "#ffffff" : (node.color || "#38bdf8");
+      ctx.lineWidth = isSelected ? 2.5 : 1.8;
+      ctx.stroke();
+
+      // Icon Emoji
+      ctx.font = `${node.radius * 0.95}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(node.icon || "🔑", node.x, node.y + 1);
+
+      // Label Below Node
+      ctx.font = isSelected ? "bold 11px -apple-system, sans-serif" : "11px -apple-system, sans-serif";
+      ctx.fillStyle = isSelected ? "#ffffff" : "#cbd5e1";
+      ctx.fillText(node.label, node.x, node.y + node.radius + 14);
+
+      // Status Indicator Dot
+      const dotColor = node.status === "HEALTHY" ? "#10b981" : (node.status === "MISSING" ? "#ef4444" : "#f59e0b");
+      ctx.beginPath();
+      ctx.arc(node.x + node.radius - 2, node.y - node.radius + 2, 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = dotColor;
+      ctx.fill();
+      ctx.strokeStyle = "#090b10";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    });
+
+    // 3. Draw Hub Node (Aegis Core)
+    const hubHovered = hoveredKeyNode && hoveredKeyNode.id === hubNode.id;
+    ctx.beginPath();
+    ctx.arc(hubNode.x, hubNode.y, hubNode.radius + (hubHovered ? 8 : 5), 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(99, 102, 241, 0.22)";
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(hubNode.x, hubNode.y, hubNode.radius, 0, Math.PI * 2);
+    ctx.fillStyle = "#141926";
+    ctx.fill();
+    ctx.strokeStyle = "#818cf8";
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    ctx.font = `${hubNode.radius * 0.9}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(hubNode.icon || "🛡️", hubNode.x, hubNode.y + 1);
+
+    ctx.font = "bold 11px -apple-system, sans-serif";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText("Control Plane Hub", hubNode.x, hubNode.y + hubNode.radius + 16);
+
+    // Request next frame if animating
+    if (keyGraphAnimRunning) {
+      requestAnimationFrame(draw);
+    }
+  }
+
+  if (!keyGraphAnimRunning) {
+    keyGraphAnimRunning = true;
+    requestAnimationFrame(draw);
+  }
+}
+
+function renderKeyInspector(nodeId) {
+  selectedKeyNodeId = nodeId;
+  const drawerEmpty = $("keyInspectorEmpty");
+  const drawerContent = $("keyInspectorContent");
+  if (!drawerContent || !keyGraphData) return;
+
+  const node = keyGraphData.nodes.find(n => n.id === nodeId);
+  if (!node) {
+    if (drawerEmpty) drawerEmpty.style.display = "block";
+    drawerContent.style.display = "none";
+    return;
+  }
+
+  if (drawerEmpty) drawerEmpty.style.display = "none";
+  drawerContent.style.display = "block";
+
+  const badgeClass = node.status === "HEALTHY" ? "ok" : (node.status === "MISSING" ? "crit" : "warn");
+  const scopes = node.scopes || [];
+  const details = node.details || {};
+
+  drawerContent.innerHTML = `
+    <!-- Header -->
+    <div class="flex items-center justify-between" style="margin-bottom:12px;">
+      <div class="flex items-center gap-8">
+        <span style="font-size:24px;">${node.icon || '🔑'}</span>
+        <div>
+          <div style="font-weight:700; font-size:14px; color:var(--text-primary);">${node.label}</div>
+          <div style="font-size:11px; color:var(--text-muted);">${node.role || node.type}</div>
+        </div>
+      </div>
+      <span class="badge ${badgeClass}">${node.status}</span>
+    </div>
+
+    <!-- Key Identity Box -->
+    <div class="key-inspector-card">
+      <div class="flex items-center justify-between" style="margin-bottom:6px;">
+        <span class="text-xs text-muted">Redacted Key / Token:</span>
+        <code style="font-size:11px; color:var(--accent); font-weight:600;">${node.redacted_token || 'N/A'}</code>
+      </div>
+      <div class="flex items-center justify-between" style="margin-bottom:6px;">
+        <span class="text-xs text-muted">Config Source:</span>
+        <span style="font-size:11px; color:var(--text-secondary);">${node.source || 'N/A'}</span>
+      </div>
+      <div class="flex items-center justify-between" style="margin-bottom:6px;">
+        <span class="text-xs text-muted">Target Endpoint:</span>
+        <span style="font-size:11px; color:var(--text-secondary); font-family:var(--font-mono);">${node.target || 'N/A'}</span>
+      </div>
+      <div class="flex items-center justify-between">
+        <span class="text-xs text-muted">Rate Limit / Quota:</span>
+        <span style="font-size:11px; color:var(--warn); font-weight:500;">${node.quota || 'N/A'}</span>
+      </div>
+    </div>
+
+    <!-- Scopes & Capabilities -->
+    <div style="margin-bottom:12px;">
+      <div style="font-size:11px; font-weight:600; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px;">Authorized Capabilities &amp; Scopes:</div>
+      <div class="flex flex-wrap gap-4">
+        ${scopes.map(s => `<span class="scope-chip">✓ ${s}</span>`).join('')}
+      </div>
+    </div>
+
+    <!-- Troubleshooting Guide -->
+    <div class="troubleshoot-box" style="margin-bottom:14px;">
+      <div style="font-weight:600; margin-bottom:4px; color:var(--text-primary); font-size:12px;">Diagnostic &amp; Troubleshooting Guide:</div>
+      <div>${details.troubleshooting || 'All permissions nominal. Key is authorized by dual-plane guardian.'}</div>
+    </div>
+
+    <!-- Live Test Connection Action -->
+    <div class="flex flex-col gap-8">
+      <button class="btn sm primary" id="btnTestSelectedKey" style="width:100%; justify-content:center;">⚡ Test Live Connection &amp; Latency</button>
+      <button class="btn sm" id="btnCopySelectedKeySnippet" style="width:100%; justify-content:center;">📋 Copy Troubleshooting Identifier</button>
+    </div>
+
+    <div id="keyTestResultBox" style="display:none; margin-top:12px; padding:10px 12px; border-radius:6px; font-size:12px;"></div>
+  `;
+
+  // Attach Test Button listener
+  $("btnTestSelectedKey")?.addEventListener("click", async () => {
+    const btn = $("btnTestSelectedKey");
+    const resBox = $("keyTestResultBox");
+    if (!btn || !resBox) return;
+
+    btn.textContent = "Pinging endpoint...";
+    btn.disabled = true;
+
+    try {
+      const res = await (await fetch("/api/security/test-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ node_id: node.id })
+      })).json();
+
+      resBox.style.display = "block";
+      if (res.success) {
+        resBox.style.background = "var(--ok-subtle)";
+        resBox.style.border = "1px solid var(--ok)";
+        resBox.style.color = "var(--ok)";
+        resBox.innerHTML = `<strong>🟢 ${res.status}:</strong> ${res.message} <span style="margin-left:6px; font-family:var(--font-mono); font-weight:bold;">(${res.latency_ms}ms)</span>`;
+        showToast(`Tested ${node.label}: ${res.status} (${res.latency_ms}ms)`, "ok");
+      } else {
+        resBox.style.background = "var(--crit-subtle)";
+        resBox.style.border = "1px solid var(--crit)";
+        resBox.style.color = "var(--crit)";
+        resBox.innerHTML = `<strong>🔴 ${res.status}:</strong> ${res.message}`;
+        showToast(`Test ${node.label}: ${res.status}`, "warn");
+      }
+    } catch (e) {
+      resBox.style.display = "block";
+      resBox.style.background = "var(--crit-subtle)";
+      resBox.style.border = "1px solid var(--crit)";
+      resBox.style.color = "var(--crit)";
+      resBox.textContent = `Connection test exception: ${e}`;
+    } finally {
+      btn.textContent = "⚡ Test Live Connection & Latency";
+      btn.disabled = false;
+    }
+  });
+
+  $("btnCopySelectedKeySnippet")?.addEventListener("click", () => {
+    copySnippet(`aegis security inspect ${node.id} --target "${node.target}"`);
+  });
+}
+
+function testKeyFromTable(nodeId) {
+  renderKeyInspector(nodeId);
+  $("keyInspectorDrawer")?.scrollIntoView({ behavior: "smooth" });
+  $("btnTestSelectedKey")?.click();
+}
+window.testKeyFromTable = testKeyFromTable;
+
+// Canvas Event Listeners (Hover & Click)
+function initKeyGraphEvents() {
+  const canvas = $("keyGraphCanvas");
+  if (!canvas) return;
+
+  function getNodeAt(x, y) {
+    if (!keyGraphData) return null;
+    const hub = keyGraphData.nodes.find(n => n.id === "hub-core");
+    if (hub && Math.hypot(x - hub.x, y - hub.y) <= hub.radius + 6) return hub;
+
+    const surrounding = keyGraphData.nodes.filter(n => n.id !== "hub-core" && (keyGraphFilter === "ALL" || n.category === keyGraphFilter));
+    for (const node of surrounding) {
+      if (Math.hypot(x - node.x, y - node.y) <= node.radius + 6) {
+        return node;
+      }
+    }
+    return null;
+  }
+
+  canvas.addEventListener("mousemove", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const node = getNodeAt(x, y);
+    if (node) {
+      canvas.style.cursor = "pointer";
+      hoveredKeyNode = node;
+    } else {
+      canvas.style.cursor = "default";
+      hoveredKeyNode = null;
+    }
+  });
+
+  canvas.addEventListener("click", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const node = getNodeAt(x, y);
+    if (node) {
+      renderKeyInspector(node.id);
+    }
+  });
+
+  // Filter Buttons
+  document.querySelectorAll("#keyGraphFilterGroup .filter-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#keyGraphFilterGroup .filter-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      keyGraphFilter = btn.dataset.filter || "ALL";
+      renderKeyGraphCanvas();
+    });
+  });
+
+  // View Toggle (Graph vs Table)
+  $("btnViewGraph")?.addEventListener("click", () => {
+    $("btnViewGraph")?.classList.add("active");
+    $("btnViewTable")?.classList.remove("active");
+    $("keyGraphContainer").style.display = "grid";
+    $("keyTableContainer").style.display = "none";
+    renderKeyGraphCanvas();
+  });
+
+  $("btnViewTable")?.addEventListener("click", () => {
+    $("btnViewTable")?.classList.add("active");
+    $("btnViewGraph")?.classList.remove("active");
+    $("keyGraphContainer").style.display = "none";
+    $("keyTableContainer").style.display = "block";
+  });
+
+  $("btnRefreshKeyGraph")?.addEventListener("click", () => {
+    refreshKeyGraph();
+    showToast("Key & Integration topology refreshed", "ok");
+  });
+
+  // Shortcut from overview demo toolbar
+  $("btnOpenKeyGraph")?.addEventListener("click", () => {
+    switchTab("incidents");
+    setTimeout(() => {
+      $("securityPanel")?.scrollIntoView({ behavior: "smooth" });
+      refreshKeyGraph();
+    }, 150);
+  });
+
+  // Window resize re-render
+  window.addEventListener("resize", () => {
+    renderKeyGraphCanvas();
+  });
+}
 
 // ------------------------------------------------------------- Controls & SSE
 $("modeToggle")?.addEventListener("change", async (e) => {
@@ -2013,6 +2443,8 @@ async function updateDualModelsStatus() {
 // ------------------------------------------------------------- Initialization
 pollOverview();
 updateDualModelsStatus();
+initKeyGraphEvents();
+refreshKeyGraph();
 pollHistory();
 pollSensors();
 setupClusterJoinCommands();

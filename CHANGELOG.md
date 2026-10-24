@@ -4,6 +4,37 @@ All notable changes to the **Aegis AI** platform are documented in this file in 
 
 ---
 
+## 2026-10-25T04:10:00+05:30 — Aegis AI v3.2.0: Interactive API Key Topology Graph & Real-Time Troubleshooting Center
+
+- **Added & Changed:**
+  - **Interactive API Key & Integration Topology Graph**:
+    - Implemented `GET /api/security/graph` exposing an interconnected node-and-edge topology of all API keys, external integrations, and internal cryptographic RBAC tokens:
+      - 🛡️ **Central Governance Hub**: Aegis Control Plane (dual-plane governance).
+      - 🧠 **Software Intelligence Key**: Google Gemini API (`gemini-2.5-flash` / `gemini-3.5-flash`), 30 req/hr budget.
+      - 🤖 **Autonomous SRE Key**: Devin Control API (`https://api.devin.ai/v1`).
+      - 🐙 **Version Control Token**: GitHub access token (`1kailas/Aegis`).
+      - ⚡ **Local Hardware Service**: Ollama Unix daemon (`http://127.0.0.1:11434`, Qwen model).
+      - 🔑 **Cryptographic RBAC Tokens**: SHA-256 hashed Admin, Operator, Auditor, and Node Agent keys.
+  - **Live Connection & Latency Testing Endpoint**:
+    - Added `POST /api/security/test-key` allowing one-click diagnostic testing of any key or integration node in the topology.
+    - Measures live roundtrip latency in milliseconds, tests authentication credentials, and returns targeted troubleshooting instructions if an integration is rate-limited (HTTP 429), unconfigured, or unreachable.
+  - **Visual Topology Graph UI & Troubleshooting Drawer**:
+    - Built interactive HTML5 Canvas visual graph in `aegis/static/index.html` and `app.js` with:
+      - Distinct color-coded structures by category: 🟣 Indigo/Purple for AI Cloud, 🔵 Sky Blue for VCS, 🟢 Emerald for Infrastructure, and 🟠 Amber/Red for RBAC keys.
+      - Glowing status rings (🟢 Healthy / 🟡 Rate-limited / 🔴 Missing).
+      - Animated data-flow particles traveling along quadratic bezier edge curves.
+      - Category filter chips (`All Keys`, `AI Cloud`, `RBAC Tokens`, `Infrastructure`, `VCS / Git`).
+      - Toggle between **Visual Topology Graph** and **Keys & RBAC Table View**.
+    - Created slide-out **Troubleshooting Inspector Drawer**:
+      - Displays key identity, redacted prefix, configuration source, target endpoint, and granted scopes.
+      - Includes instant **"⚡ Test Live Connection & Latency"** button and targeted troubleshooting guide.
+      - Added **"🔑 Key Graph"** quick-access button to the Overview live demo toolbar.
+  - **Test Suite Expansion**:
+    - Added unit tests for `/api/security/graph` and `/api/security/test-key` in `tests/test_dual_models.py`.
+    - Total test suite now at **90 passing tests** (100% pass rate).
+
+---
+
 ## 2026-10-25T03:50:00+05:30 — Aegis AI v3.2.0: Dual-Model Division of Labor — Software Intelligence (Gemini) & Hardware/Scaling Intelligence
 
 - **Added & Changed:**

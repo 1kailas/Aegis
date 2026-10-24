@@ -2,10 +2,11 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Version: 3.2.0](https://img.shields.io/badge/version-3.2.0-blue.svg)]()
-[![Tests Passing](https://img.shields.io/badge/tests-88%2F88%20passed-brightgreen.svg)]()
+[![Tests Passing](https://img.shields.io/badge/tests-90%2F90%20passed-brightgreen.svg)]()
 [![Devin Hacks: Ready](https://img.shields.io/badge/Devin%20Hacks-Hackathon%20Ready-purple.svg)]()
 [![Gemini Tier 2: Enabled](https://img.shields.io/badge/Gemini%202.5%20Flash-Active-blue.svg)]()
 [![Dual-Model: Active](https://img.shields.io/badge/Dual--Model-Software%20%2B%20Hardware-indigo.svg)]()
+[![Topology Graph: Active](https://img.shields.io/badge/API%20Key%20Graph-Visual%20Topology-emerald.svg)]()
 [![Security: Hardened](https://img.shields.io/badge/security-hardened-blue.svg)](SECURITY.md)
 [![Agents: Devin Protocol](https://img.shields.io/badge/agents-Devin%20protocol-purple.svg)](AGENTS.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -43,6 +44,7 @@ This launches the Aegis Control Plane (`http://localhost:8000`), the demo target
 | **01:00 – 01:15** | **Hardware Model Auto-Scaling Demo** | Click **"⚡ Scale Instances"** (or trigger `POST /api/hardware/scale-instances`). The **Hardware Intelligence Model** detects compute saturation and autonomously scales workload replicas (1 -> 2 instances), verified across cluster nodes. |
 | **01:15 – 01:25** | **Closing the Loop (Verified Recovery)** | Click **"Verify & Close Loop"**. Aegis applies the repair to the target service and runs an independent HTTP health probe. Once the live probe returns **HTTP 200 OK**, the incident transitions to **`RECOVERY_VERIFIED`** and displays the headline **MTTR Metric** (e.g., `Time to Verified Recovery: 38.4s`). |
 | **01:25 – 01:30** | **Deterministic Safety Demonstration** | Click **"Safety Test (403)"**. Aegis submits `rm -rf /` through the `ActionPolicyEngine`. The dual-plane guardian immediately blocks execution with a deterministic **HTTP 403 Forbidden**, proving that AI models only advise while deterministic code enforces safety invariants. |
+| **01:30 – 01:40** | **API Key Topology Graph & Troubleshooting** | Click **"🔑 Key Graph"** (or navigate to Incidents tab). An interactive canvas topology graph displays all external keys (Gemini, Devin, GitHub, Ollama) and cryptographic RBAC tokens in color-coded clusters. Click any key node to view authorized scopes and click **"⚡ Test Live Connection"** to measure live roundtrip latency in milliseconds with instant troubleshooting advice. |
 
 ---
 

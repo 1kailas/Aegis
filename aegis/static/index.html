@@ -77,6 +77,7 @@
       <button class="btn sm danger" id="btnTestSafety" title="Submits 'rm -rf /' to verify deterministic 403 rejection">Safety Test (403)</button>
       <button class="btn sm" id="btnSimulateLoad" title="Triggers deterministic VRAM/memory eviction via ResourceGuardian">Simulate Load</button>
       <button class="btn sm info" id="btnScaleInstances" title="Hardware Model auto-scales instances across cluster nodes to relieve compute saturation">⚡ Scale Instances</button>
+      <button class="btn sm" id="btnOpenKeyGraph" title="Jump to Security, API Keys & Integration Topology Graph">🔑 Key Graph</button>
     </div>
   </div>
 
@@ -684,16 +685,84 @@
     <div class="panel-body" id="forecastContainer"></div>
   </div>
 
-  <!-- RBAC Keys -->
-  <div class="panel">
-    <div class="panel-header">
-      <div class="panel-title">Cryptographic RBAC &amp; API Key Management</div>
-      <button class="btn sm primary" id="createApiKeyBtn">Generate New Key</button>
+  <!-- Security, Cryptographic RBAC & API Keys Center -->
+  <div class="panel" id="securityPanel">
+    <div class="panel-header" style="flex-wrap:wrap; gap:12px;">
+      <div>
+        <div class="panel-title flex items-center gap-8">
+          <span>Security, API Keys &amp; Integration Topology</span>
+          <span class="badge info" id="keyGraphTotalBadge">Keys Monitored</span>
+        </div>
+        <div class="panel-subtitle">Visual connection topology graph, cryptographic RBAC tokens &amp; real-time troubleshooting diagnostics</div>
+      </div>
+      <div class="panel-actions flex items-center gap-8">
+        <div class="filter-bar" id="keyGraphViewToggle">
+          <button class="filter-btn active" id="btnViewGraph" data-view="graph">🌐 Visual Topology Graph</button>
+          <button class="filter-btn" id="btnViewTable" data-view="table">📋 Keys &amp; RBAC Table</button>
+        </div>
+        <button class="btn sm" id="btnRefreshKeyGraph">Refresh</button>
+        <button class="btn sm primary" id="createApiKeyBtn">+ Generate RBAC Key</button>
+      </div>
     </div>
-    <div class="tbl-wrap">
+
+    <!-- Summary KPI Cards -->
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:12px; padding:14px 18px; border-bottom:1px solid var(--border);">
+      <div class="metric-card" style="padding:10px 14px; background:rgba(15,19,28,0.6);">
+        <div class="metric-label">Total Keys &amp; Tokens</div>
+        <div class="metric-val" id="metricTotalKeys" style="font-size:20px;">–</div>
+        <div class="metric-sub">Cloud + RBAC + Node Tokens</div>
+      </div>
+      <div class="metric-card" style="padding:10px 14px; background:rgba(15,19,28,0.6);">
+        <div class="metric-label">Healthy &amp; Verified</div>
+        <div class="metric-val ok" id="metricHealthyKeys" style="font-size:20px;">–</div>
+        <div class="metric-sub">Active authentication</div>
+      </div>
+      <div class="metric-card" style="padding:10px 14px; background:rgba(15,19,28,0.6);">
+        <div class="metric-label">Cloud AI Integrations</div>
+        <div class="metric-val info" id="metricCloudAiKeys" style="font-size:20px;">–</div>
+        <div class="metric-sub">Gemini 2.5 Flash &amp; Devin</div>
+      </div>
+      <div class="metric-card" style="padding:10px 14px; background:rgba(15,19,28,0.6);">
+        <div class="metric-label">RBAC Roles Active</div>
+        <div class="metric-val warn" id="metricRbacRoles" style="font-size:20px;">–</div>
+        <div class="metric-sub">Admin / Operator / Node</div>
+      </div>
+    </div>
+
+    <!-- VIEW 1: Visual Interactive Topology Graph -->
+    <div id="keyGraphContainer" style="display:grid; grid-template-columns: 1fr 340px; min-height:460px; background:var(--bg); border-bottom:1px solid var(--border); position:relative;">
+      <!-- Canvas Graph Viewport -->
+      <div id="keyGraphViewport" style="position:relative; overflow:hidden; min-height:460px; background:radial-gradient(ellipse at center, rgba(30,41,59,0.35) 0%, rgba(9,11,16,0.95) 100%);">
+        <canvas id="keyGraphCanvas" style="width:100%; height:100%; min-height:460px; display:block;"></canvas>
+        <!-- Overlay Graph Controls / Filter Chips -->
+        <div style="position:absolute; top:12px; left:14px; display:flex; gap:6px; flex-wrap:wrap; z-index:10;" id="keyGraphFilterGroup">
+          <button class="filter-btn active sm" data-filter="ALL">All Keys</button>
+          <button class="filter-btn sm" data-filter="ai_cloud">AI Cloud</button>
+          <button class="filter-btn sm" data-filter="rbac">RBAC Tokens</button>
+          <button class="filter-btn sm" data-filter="infrastructure">Infrastructure</button>
+          <button class="filter-btn sm" data-filter="vcs">VCS / Git</button>
+        </div>
+        <div style="position:absolute; bottom:12px; left:14px; font-size:11px; color:var(--text-muted); z-index:10; background:rgba(15,19,28,0.7); padding:4px 8px; border-radius:4px; border:1px solid var(--border-subtle);">
+          💡 Tip: Click any key node to view scopes, test live connection &amp; troubleshoot
+        </div>
+      </div>
+
+      <!-- Right-side Troubleshooting Inspector Drawer -->
+      <div id="keyInspectorDrawer" style="padding:16px; background:var(--bg-card); border-left:1px solid var(--border); overflow-y:auto; max-height:480px;">
+        <div id="keyInspectorEmpty" style="text-align:center; padding:50px 10px; color:var(--text-muted);">
+          <div style="font-size:32px; margin-bottom:8px;">🔑</div>
+          <div style="font-weight:600; font-size:13px; color:var(--text-primary); margin-bottom:4px;">Key &amp; Integration Inspector</div>
+          <div style="font-size:12px;">Click any node on the topology graph to inspect permissions, live latency &amp; troubleshooting guide.</div>
+        </div>
+        <div id="keyInspectorContent" style="display:none;"></div>
+      </div>
+    </div>
+
+    <!-- VIEW 2: Traditional Table View (Toggleable) -->
+    <div id="keyTableContainer" style="display:none;" class="tbl-wrap">
       <table class="tbl" id="apiKeysTbl">
         <thead>
-          <tr><th>Key Name</th><th>Role</th><th>Prefix</th><th>Created</th><th>Last Used</th></tr>
+          <tr><th>Key Identifier</th><th>Role</th><th>Type</th><th>Status</th><th>Scopes</th><th>Source</th><th>Actions</th></tr>
         </thead>
         <tbody></tbody>
       </table>
