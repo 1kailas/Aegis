@@ -63,9 +63,13 @@ function fallbackCopy(text) {
 }
 
 // ------------------------------------------------------------- Navigation & Shortcuts
-const TABS = ["overview", "cluster", "models", "workloads", "incidents", "hardware", "ai", "engineering", "policy"];
+const TABS = ["overview", "cluster", "models", "infra", "incidents"];
 
 function switchTab(tabName) {
+  // Graceful aliases for legacy/external links
+  if (tabName === "workloads" || tabName === "hardware") tabName = "infra";
+  if (tabName === "policy" || tabName === "engineering" || tabName === "ai") tabName = "incidents";
+
   document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
   document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
 
@@ -77,12 +81,8 @@ function switchTab(tabName) {
 
   if (tabName === "cluster") refreshCluster();
   if (tabName === "models") refreshModels();
-  if (tabName === "workloads") refreshDocker();
-  if (tabName === "incidents") refreshIncidents();
-  if (tabName === "ai") refreshAI();
-  if (tabName === "engineering") refreshDevin();
-  if (tabName === "policy") refreshAudit();
-  if (tabName === "hardware") pollSensors();
+  if (tabName === "infra") { refreshDocker(); pollSensors(); }
+  if (tabName === "incidents") { refreshIncidents(); refreshAudit(); }
 }
 window.switchTab = switchTab;
 
@@ -984,66 +984,92 @@ $("runDiagBtn")?.addEventListener("click", async () => {
 async function pollSensors() {
   try {
     const sensors = await (await fetch("/api/sensors")).json();
-    $("sensorTbl").querySelector("tbody").innerHTML = sensors.map(s => {
-      const l = s.latest || {};
-      const val = l.value !== null && l.value !== undefined ? `${l.value.toFixed(1)} ${s.unit || ""}` : "–";
-      const bClass = l.validity === "VALID" ? "ok" : l.validity === "STALE" ? "warn" : "crit";
-      return `<tr><td><code>${s.sensor_id}</code></td><td>${s.kind}</td><td><strong>${val}</strong></td><td><span class="badge ${bClass}">${l.validity}</span></td></tr>`;
-    }).join("");
+    const sensorTbl = $("sensorTbl")?.querySelector("tbody");
+    if (sensorTbl) {
+      sensorTbl.innerHTML = sensors.map(s => {
+        const l = s.latest || {};
+        const val = l.value !== null && l.value !== undefined ? `${l.value.toFixed(1)} ${s.unit || ""}` : "–";
+        const bClass = l.validity === "VALID" ? "ok" : l.validity === "STALE" ? "warn" : "crit";
+        return `<tr><td><code>${s.sensor_id}</code></td><td>${s.kind}</td><td><strong>${val}</strong></td><td><span class="badge ${bClass}">${l.validity}</span></td></tr>`;
+      }).join("");
+    }
 
     const storage = await (await fetch("/api/system/storage")).json();
-    $("storageTbl").querySelector("tbody").innerHTML = (storage.partitions || []).map(p => `
-      <tr>
-        <td><strong>${p.mount}</strong></td>
-        <td><code>${p.device}</code></td>
-        <td>${p.used_gb} / ${p.total_gb} GB</td>
-        <td>
-          <div class="progress-container">
-            <div class="progress-bar"><div class="progress-fill ${p.used_pct > 85 ? 'crit' : 'ok'}" style="width:${p.used_pct}%"></div></div>
-            <span class="progress-val">${p.used_pct}%</span>
-          </div>
-        </td>
-      </tr>
-    `).join("");
+    const storageTbl = $("storageTbl")?.querySelector("tbody");
+    if (storageTbl) {
+      storageTbl.innerHTML = (storage.partitions || []).map(p => `
+        <tr>
+          <td><strong>${p.mount}</strong></td>
+          <td><code>${p.device}</code></td>
+          <td>${p.used_gb} / ${p.total_gb} GB</td>
+          <td>
+            <div class="progress-wrap">
+              <div class="progress-bar"><div class="progress-fill ${p.used_pct > 85 ? 'crit' : 'ok'}" style="width:${p.used_pct}%"></div></div>
+              <span class="progress-pct">${p.used_pct}%</span>
+            </div>
+          </td>
+        </tr>
+      `).join("");
+    }
 
     const inv = await (await fetch("/api/system/inventory")).json();
     const hw = inv.hardware || {};
     const sw = inv.software || {};
-    $("inventoryContainer").innerHTML = `
-      <table class="tbl">
-        <tbody>
-          <tr><td style="color:var(--muted);">OS &amp; Kernel</td><td><strong>${sw.os_name}</strong> (${sw.architecture}) · Kernel ${sw.kernel}</td></tr>
-          <tr><td style="color:var(--muted);">CPU Model</td><td>${hw.cpu.model || "Unknown"} (${hw.cpu.logical_cores} cores)</td></tr>
-          <tr><td style="color:var(--muted);">Memory Capacity</td><td>${hw.memory.total_mb} MB RAM · ${hw.memory.swap_total_mb} MB Swap</td></tr>
-          <tr><td style="color:var(--muted);">Python Runtime</td><td>Python ${sw.python_version}</td></tr>
-        </tbody>
-      </table>
-    `;
+    if ($("inventoryContainer")) {
+      $("inventoryContainer").innerHTML = `
+        <table class="tbl">
+          <tbody>
+            <tr><td style="color:var(--text-muted); width:160px;">OS &amp; Kernel</td><td><strong>${sw.os_name}</strong> (${sw.architecture}) · Kernel ${sw.kernel}</td></tr>
+            <tr><td style="color:var(--text-muted);">CPU Processor</td><td>${hw.cpu?.model || "Unknown"} (${hw.cpu?.logical_cores || 1} Cores)</td></tr>
+            <tr><td style="color:var(--text-muted);">System Memory</td><td>${hw.memory?.total_mb || 0} MB RAM · ${hw.memory?.swap_total_mb || 0} MB Swap</td></tr>
+            <tr><td style="color:var(--text-muted);">Python Runtime</td><td>Python ${sw.python_version || "3.x"}</td></tr>
+          </tbody>
+        </table>
+      `;
+    }
+
+    // PSI Pressure Stall Information
+    const snap = await (await fetch("/api/overview")).json();
+    const psi = snap.latest?.pressure || {};
+    if ($("psiContainer")) {
+      $("psiContainer").innerHTML = `
+        <table class="tbl">
+          <thead><tr><th>Resource</th><th>10s Avg</th><th>60s Avg</th><th>300s Avg</th></tr></thead>
+          <tbody>
+            <tr><td><strong>CPU Pressure</strong></td><td>${psi.cpu?.some_avg10 || 0}%</td><td>${psi.cpu?.some_avg60 || 0}%</td><td>${psi.cpu?.some_avg300 || 0}%</td></tr>
+            <tr><td><strong>Memory Pressure</strong></td><td>${psi.memory?.some_avg10 || 0}%</td><td>${psi.memory?.some_avg60 || 0}%</td><td>${psi.memory?.some_avg300 || 0}%</td></tr>
+            <tr><td><strong>I/O Stall</strong></td><td>${psi.io?.some_avg10 || 0}%</td><td>${psi.io?.some_avg60 || 0}%</td><td>${psi.io?.some_avg300 || 0}%</td></tr>
+          </tbody>
+        </table>
+      `;
+    }
 
     const forecasts = await (await fetch("/api/forecasting/forecasts")).json();
     const fc = $("forecastContainer");
-    const mem = forecasts.memory || {};
-    const disks = forecasts.disks || {};
-    let items = [];
-    if (mem.metric_name) {
-      const bClass = mem.severity === "CRITICAL" ? "crit" : mem.severity === "WARNING" ? "warn" : "ok";
-      items.push(`
-        <div style="background:var(--card); border:1px solid var(--line); border-radius:5px; padding:10px 14px; margin-bottom:8px;">
-          <div><strong>RAM Consumption Trend:</strong> Current: ${mem.current_value.toFixed(1)}% | Rate: ${mem.rate_per_sec > 0 ? "+" : ""}${mem.rate_per_sec.toFixed(3)}%/s</div>
-          <div style="margin-top:4px;">Projected Time-To-Exhaustion: <span class="badge ${bClass}">${mem.tte_human}</span> (Confidence: ${(mem.confidence * 100).toFixed(0)}%)</div>
-        </div>
-      `);
+    if (fc) {
+      const mem = forecasts.memory || {};
+      const disks = forecasts.disks || {};
+      let items = [];
+      if (mem.metric_name) {
+        const bClass = mem.severity === "CRITICAL" ? "crit" : mem.severity === "WARNING" ? "warn" : "ok";
+        items.push(`
+          <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-md); padding:12px 16px; margin-bottom:8px;">
+            <div><strong>RAM Consumption Trend:</strong> Current: ${mem.current_value.toFixed(1)}% | Rate: ${mem.rate_per_sec > 0 ? "+" : ""}${mem.rate_per_sec.toFixed(3)}%/s</div>
+            <div style="margin-top:4px;">Projected Time-To-Exhaustion: <span class="badge ${bClass}">${mem.tte_human}</span> (Confidence: ${(mem.confidence * 100).toFixed(0)}%)</div>
+          </div>
+        `);
+      }
+      for (const [mount, f] of Object.entries(disks)) {
+        const bClass = f.severity === "CRITICAL" ? "crit" : f.severity === "WARNING" ? "warn" : "ok";
+        items.push(`
+          <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-md); padding:12px 16px; margin-bottom:8px;">
+            <div><strong>Disk Partition [${mount}] Trend:</strong> Current: ${f.current_value.toFixed(1)}% | Rate: ${f.rate_per_sec > 0 ? "+" : ""}${f.rate_per_sec.toFixed(3)}%/s</div>
+            <div style="margin-top:4px;">Projected Time-To-Exhaustion: <span class="badge ${bClass}">${f.tte_human}</span></div>
+          </div>
+        `);
+      }
+      fc.innerHTML = items.join("") || `<div style="color:var(--text-muted); font-size:12.5px; padding:6px 0;">Accumulating telemetry samples for ordinary least squares projection...</div>`;
     }
-    for (const [mount, f] of Object.entries(disks)) {
-      const bClass = f.severity === "CRITICAL" ? "crit" : f.severity === "WARNING" ? "warn" : "ok";
-      items.push(`
-        <div style="background:var(--card); border:1px solid var(--line); border-radius:5px; padding:10px 14px; margin-bottom:8px;">
-          <div><strong>Disk Partition [${mount}] Trend:</strong> Current: ${f.current_value.toFixed(1)}% | Rate: ${f.rate_per_sec > 0 ? "+" : ""}${f.rate_per_sec.toFixed(3)}%/s</div>
-          <div style="margin-top:4px;">Projected Time-To-Exhaustion: <span class="badge ${bClass}">${f.tte_human}</span></div>
-        </div>
-      `);
-    }
-    fc.innerHTML = items.join("") || `<div style="color:var(--muted); font-size:0.8rem; padding:8px 0;">Accumulating telemetry samples for ordinary least squares projection...</div>`;
   } catch {}
 }
 
@@ -1140,30 +1166,40 @@ $("runValidationBtn")?.addEventListener("click", async () => {
 async function refreshAudit() {
   try {
     const actions = await (await fetch("/api/actions?limit=50")).json();
-    $("auditTbl").querySelector("tbody").innerHTML = actions.map(a => `
-      <tr>
-        <td>${fmtTime(a.ts)}</td>
-        <td><code>${a.actor || "operator"}</code></td>
-        <td><strong>${a.action}</strong></td>
-        <td>${a.target || "host"}</td>
-        <td>${a.detail || a.reason || "–"}</td>
-      </tr>
-    `).join("");
-
-    const demo = await (await fetch("/api/demo")).json();
-    $("demoBtns").innerHTML = Object.entries(demo.kinds || {}).map(([k, desc]) => `
-      <button class="btn sm" title="${desc}" onclick="applyDemo('${k}')">${k.replace("_", " ").toUpperCase()}</button>
-    `).join("");
-
-    const active = Object.entries(demo.active_overrides || {});
-    $("demoActive").innerHTML = active.length ?
-      `Active simulation overrides: ${active.map(([s, d]) => `<code>${s}=${d.value_c}°C</code>`).join(", ")}` :
-      "No active simulated overrides.";
+    const auditTbl = $("auditTbl")?.querySelector("tbody");
+    if (auditTbl) {
+      auditTbl.innerHTML = actions.map(a => `
+        <tr>
+          <td>${fmtTime(a.ts)}</td>
+          <td><code>${a.actor || "operator"}</code></td>
+          <td><strong>${a.action}</strong></td>
+          <td>${a.target || "host"}</td>
+          <td>${a.detail || a.reason || "–"}</td>
+        </tr>
+      `).join("");
+    }
 
     const keys = await (await fetch("/api/security/keys")).json();
-    $("apiKeysTbl").querySelector("tbody").innerHTML = keys.length ?
-      keys.map(k => `<tr><td><strong>${k.name}</strong></td><td><span class="badge info">${k.role}</span></td><td><code>${k.key_prefix}</code></td><td>${fmtTime(k.created_at)}</td><td>${fmtRelative(k.last_used_at)}</td></tr>`).join("") :
-      `<tr><td colspan="5" style="color:var(--muted); text-align:center; padding:12px;">No API keys generated.</td></tr>`;
+    const keysTbl = $("apiKeysTbl")?.querySelector("tbody");
+    if (keysTbl) {
+      keysTbl.innerHTML = keys.length ?
+        keys.map(k => `<tr><td><strong>${k.name}</strong></td><td><span class="badge info">${k.role}</span></td><td><code>${k.key_prefix}</code></td><td>${fmtTime(k.created_at)}</td><td>${fmtRelative(k.last_used_at)}</td></tr>`).join("") :
+        `<tr><td colspan="5" style="color:var(--text-muted); text-align:center; padding:14px;">No API keys generated.</td></tr>`;
+    }
+
+    const demo = await (await fetch("/api/demo")).json();
+    if ($("demoBtns")) {
+      $("demoBtns").innerHTML = Object.entries(demo.kinds || {}).map(([k, desc]) => `
+        <button class="btn sm" title="${desc}" onclick="applyDemo('${k}')">${k.replace("_", " ").toUpperCase()}</button>
+      `).join("");
+    }
+
+    const active = Object.entries(demo.active_overrides || {});
+    if ($("demoActive")) {
+      $("demoActive").innerHTML = active.length ?
+        `Active simulation overrides: ${active.map(([s, d]) => `<code>${s}=${d.value_c}°C</code>`).join(", ")}` :
+        "No active simulated overrides.";
+    }
   } catch {}
 }
 
