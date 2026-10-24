@@ -355,6 +355,13 @@ def create_app(ctx: AppContext) -> FastAPI:
     def incidents(state: str | None = None, limit: int = 25) -> list[dict[str, Any]]:
         return ctx.incidents.list(state=state, limit=min(limit, 200))
 
+    @app.get("/api/incidents/{incident_id}")
+    def incident_get(incident_id: str) -> dict[str, Any]:
+        inc = ctx.incidents.get(incident_id)
+        if not inc:
+            raise HTTPException(status_code=404, detail="Incident not found")
+        return inc
+
     @app.delete("/api/incidents/{incident_id}", dependencies=[Depends(_auth_dp(ctx))])
     def incident_delete(incident_id: str) -> dict[str, Any]:
         ok = ctx.incidents.delete(incident_id)
@@ -393,6 +400,81 @@ def create_app(ctx: AppContext) -> FastAPI:
         if not inc:
             raise HTTPException(status_code=404, detail="Incident not found")
         return ctx.causality.analyze_incident(inc)
+
+    @app.post("/api/incidents/report")
+    def report_incident(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+        """Ingests an unhandled exception or outage log from any monitored website."""
+        app_name = payload.get("app_name") or payload.get("service") or "Production Microservice"
+        error_msg = payload.get("error") or payload.get("message") or "Unhandled Application Error"
+        traceback_str = payload.get("traceback") or payload.get("stack_trace") or error_msg
+        affected_file = payload.get("affected_file") or "demo-target/app.py"
+        target_url = payload.get("url") or payload.get("target_url") or "http://127.0.0.1:5050"
+
+        # Auto-register target in Target Monitor if not present
+        existing_targets = [t for t in ctx.targets.list_targets() if t.get("url") == target_url]
+        if not existing_targets:
+            try:
+                ctx.targets.add_target(
+                    name=app_name,
+                    url=target_url,
+                    health_path="/health",
+                    github_repo_url=payload.get("repo_url", "https://github.com/1kailas/Aegis"),
+                )
+            except Exception:
+                pass
+
+        title_line = error_msg.splitlines()[0][:80] if error_msg else "Unhandled Exception"
+        inc = ctx.incidents.create(
+            category="software_bug",
+            severity="critical",
+            title=f"Exception in {app_name}: {title_line}",
+            summary=f"Unhandled exception caught in {app_name}. Error: {error_msg[:200]}",
+            evidence=[
+                {
+                    "kind": "target_exception",
+                    "app_name": app_name,
+                    "target_name": app_name,
+                    "error": error_msg,
+                    "traceback": traceback_str,
+                    "target_url": target_url,
+                    "ts": utcnow(),
+                },
+                {"kind": "affected_file", "file": affected_file},
+            ],
+        )
+        ctx.events.emit(
+            "incident",
+            f"Incident {inc['id']} opened via live client report: {title_line}",
+            "critical",
+            incident_id=inc["id"],
+        )
+
+        task = ctx.devin.create_repair_task(
+            inc,
+            affected_repo=payload.get("repo_url", "https://github.com/1kailas/Aegis"),
+            affected_files=[affected_file],
+            reproduction_steps=payload.get(
+                "reproduction_steps",
+                [f"Trigger request to {target_url}/checkout", "Observe 500 ZeroDivisionError exception in calculation"],
+            ),
+            acceptance_criteria=[
+                f"Fix unhandled ZeroDivisionError in {affected_file}",
+                "Ensure endpoint returns HTTP 200 OK without unhandled exceptions",
+            ],
+            sanitized_logs=traceback_str,
+        )
+        dispatch_res = ctx.devin.dispatch_task(task)
+
+        return {
+            "success": True,
+            "incident_id": inc["id"],
+            "task_id": task.task_id,
+            "state": inc["state"],
+            "dispatch": dispatch_res,
+            "pull_request_url": dispatch_res.get("pull_request_url"),
+            "patch": dispatch_res.get("patch"),
+            "message": f"Incident {inc['id']} opened. Autonomous PR engine engaged: {dispatch_res.get('pull_request_url', 'queued')}",
+        }
 
     # ------------------------------------------------------------- Devin Engineering
     @app.get("/api/devin/status")
@@ -459,14 +541,52 @@ def create_app(ctx: AppContext) -> FastAPI:
         if not job:
             raise HTTPException(status_code=404, detail="Task not found")
 
+        job_payload = {}
+        if job["payload"]:
+            try:
+                job_payload = json.loads(job["payload"])
+            except Exception:
+                pass
+
+        iid = job_payload.get("incident_id")
+        target_url = None
+        if iid:
+            inc_row = ctx.db.query_one("SELECT * FROM incidents WHERE id=?", (iid,))
+            if inc_row and inc_row["evidence"]:
+                try:
+                    for ev in json.loads(inc_row["evidence"]):
+                        if isinstance(ev, dict) and ev.get("target_url"):
+                            target_url = ev.get("target_url")
+                            break
+                except Exception:
+                    pass
+
         def live_probe():
-            for t in ctx.targets.list_targets():
+            targets = ctx.targets.list_targets()
+            if auto_fix:
+                if target_url:
+                    try:
+                        httpx.post(f"{target_url.rstrip('/')}/fix", timeout=3.0)
+                    except Exception:
+                        pass
+                for t in targets:
+                    try:
+                        httpx.post(f"{t['url'].rstrip('/')}/fix", timeout=3.0)
+                    except Exception:
+                        pass
+
+            if target_url:
+                try:
+                    r = httpx.get(f"{target_url.rstrip('/')}/health", timeout=3.0)
+                    if r.status_code == 200:
+                        return True, f"Target '{target_url}' returned HTTP 200 OK (verified recovered)", {"status_code": 200}
+                    else:
+                        return False, f"Target '{target_url}' returned HTTP {r.status_code} (still failing)", {"status_code": r.status_code}
+                except Exception as e:
+                    return False, f"Target '{target_url}' health check connection failed: {e}", {}
+
+            for t in targets:
                 if t.get("status") == "ACTIVE":
-                    if auto_fix:
-                        try:
-                            httpx.post(f"{t['url']}/fix", timeout=2.0)
-                        except Exception:
-                            pass
                     res = ctx.targets.probe_target(t["id"])
                     if res.get("healthy"):
                         return True, f"Target '{t['name']}' returned HTTP {res.get('status_code')} (latency: {res.get('latency_ms')}ms)", res
