@@ -68,7 +68,7 @@ class RuntimeFlags:
             return self._mode
 
     def set_mode(self, value: str) -> None:
-        if value not in ("monitoring_only", "policy_autonomous"):
+        if value not in ("monitoring_only", "operator_approval", "policy_autonomous"):
             raise ValueError(f"Invalid monitoring mode '{value}'")
         with self._lock:
             self._mode = value

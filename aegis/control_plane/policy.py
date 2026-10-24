@@ -71,7 +71,7 @@ class PolicyExecutor:
                                 "simulated data cannot authorize this action")
             return "REJECTED"
 
-        mode = "dry_run" if self.flags.mode == "monitoring_only" else "real"
+        mode = "dry_run" if self.flags.mode in ("monitoring_only", "operator_approval") else "real"
         detail: dict[str, Any] = {}
 
         if action == "increase_sampling":

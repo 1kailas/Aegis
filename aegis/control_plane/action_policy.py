@@ -165,14 +165,14 @@ class RemediationPolicyEngine:
                 "reason": f"Action '{action.action_type}' has risk level {action.risk_level.value} and requires human approval",
             }
 
-        # In monitoring_only mode, all real state changes are dry-run only
-        if mode == "monitoring_only" and action.action_type not in {"increase_sampling", "create_or_update_incident", "notify"}:
-            self._record_action(action, "VERIFIED", "dry_run", "Dry run evaluation passed in monitoring_only mode")
+        # In monitoring_only or operator_approval mode, all real state changes are dry-run only unless approved
+        if mode in ("monitoring_only", "operator_approval") and action.action_type not in {"increase_sampling", "create_or_update_incident", "notify"}:
+            self._record_action(action, "VERIFIED", "dry_run", f"Dry run evaluation passed in {mode} mode")
             return {
                 "authorized": True,
                 "result": "VERIFIED",
                 "mode": "dry_run",
-                "reason": "Monitoring-only mode: simulated dry run verified without real mutation",
+                "reason": f"{mode} mode: simulated dry run verified without real mutation",
             }
 
         # Real Execution

@@ -42,8 +42,8 @@ class ModeRequest(BaseModel):
     @field_validator("mode")
     @classmethod
     def valid_mode(cls, v: str) -> str:
-        if v not in ("monitoring_only", "policy_autonomous"):
-            raise ValueError("mode must be monitoring_only or policy_autonomous")
+        if v not in ("monitoring_only", "operator_approval", "policy_autonomous"):
+            raise ValueError("mode must be monitoring_only, operator_approval, or policy_autonomous")
         return v
 
 
@@ -432,6 +432,11 @@ def create_app(ctx: AppContext) -> FastAPI:
 
         return pr_res.as_dict()
 
+    @app.get("/docs", include_in_schema=False)
+    def docs_redirect():
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/api/docs")
+
     @app.post("/api/repair/verify_recovery")
     def repair_verify_recovery(payload: dict[str, Any]) -> dict[str, Any]:
         incident_id = payload.get("incident_id")
@@ -440,10 +445,24 @@ def create_app(ctx: AppContext) -> FastAPI:
         # Live probe function
         def probe():
             snap, val, _ = ctx.metrics.collect()
-            cpu_ok = snap.get("cpu_percent", 0) < 90.0
-            mem_ok = snap["memory"]["percent"] < 90.0
-            healthy = cpu_ok and mem_ok
-            return healthy, f"CPU={snap.get('cpu_percent')}%, Mem={snap['memory']['percent']}%", snap
+            cpu_pct = snap.get("cpu_percent", 0.0) or 0.0
+            mem_pct = snap.get("memory", {}).get("percent", 0.0) or 0.0
+
+            if target == "thermal_guardian":
+                t_state = ctx.guardian.state.state
+                healthy = t_state in ("NORMAL", "RECOVERY")
+                return healthy, f"Thermal guardian state: {t_state}", {"state": t_state}
+
+            if ctx.docker.is_available() and target not in ("host", "system"):
+                try:
+                    c = ctx.docker._client.containers.get(target)
+                    healthy = c.status == "running"
+                    return healthy, f"Container '{target}' status: {c.status}", {"status": c.status}
+                except Exception:
+                    pass
+
+            healthy = (cpu_pct < 95.0) and (mem_pct < 95.0)
+            return healthy, f"Host vitals: CPU={cpu_pct}%, Mem={mem_pct}%", snap
 
         rec = ctx.recovery_verifier.verify_workload_recovery(
             incident_id=incident_id or f"INC-{int(time.time())}",

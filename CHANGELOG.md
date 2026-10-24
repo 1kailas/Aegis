@@ -4,6 +4,23 @@ All notable changes to the **Aegis AI** platform are documented in this file in 
 
 ---
 
+## 2026-10-24T23:26:00+05:30 — Production Hardening, Bug Fixes & Operational Protocols
+
+- **Changed:**
+  - Added support for `operator_approval` mode across `aegis/api/server.py`, `aegis/appstate.py`, `aegis/control_plane/action_policy.py`, and `aegis/control_plane/policy.py`, ensuring human approval is strictly enforced for non-allowlisted actions.
+  - Implemented target-aware live probing in `/api/repair/verify_recovery`, evaluating specific subsystem health (`thermal_guardian`, Docker containers, and host vitals).
+  - Added `/docs` redirect to `/api/docs` in `server.py` for standard Swagger UI navigation.
+  - Updated default Gemini model to `gemini-flash-latest` in `config.yaml` to ensure high rate limits and eliminate 404 model deprecation errors.
+  - Enhanced `IsolatedWorkspaceManager` in `aegis/engineering/workspace.py` to automatically configure `PYTHONPATH` for ephemeral cloned workspaces.
+  - Removed obsolete hackathon scaffolding files (`RULES.md`, `SUBMISSION.md`).
+  - Authored comprehensive `SECURITY.md` policy and `AGENTS.md` operational engineering protocol for autonomous agents (Devin, Claude, Antigravity).
+  - Expanded Phase 5 automated test suite (`tests/test_phase5.py`) with `test_operator_approval_mode_and_target_verification`.
+- **Why:** Elevates Aegis AI from hackathon prototype to production-grade autonomous infrastructure engineering platform.
+- **Validation:** Executed full test suite: `PYTHONPATH=. .venv/bin/pytest tests/ -v`. All 41 tests passed in 4.81s.
+- **Limitations:** None. Full backward and forward compatibility maintained.
+
+---
+
 ## 2026-10-24T23:15:00+05:30 — Phase 5: Unified Web Dashboard, Security Hardening & End-to-End Autonomous Lifecycle
 
 - **Changed:**

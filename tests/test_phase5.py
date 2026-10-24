@@ -162,3 +162,45 @@ def test_dashboard_static_and_docs_served(app_ctx: AppContext):
     r_api = client.get("/api/openapi.json")
     assert r_api.status_code == 200
     assert r_api.json()["info"]["title"] == "Aegis AI"
+
+    # Docs redirect
+    r_docs = client.get("/docs", follow_redirects=False)
+    assert r_docs.status_code in (307, 302, 301)
+    assert r_docs.headers["location"] == "/api/docs"
+
+
+def test_operator_approval_mode_and_target_verification(app_ctx: AppContext):
+    app = create_app(app_ctx)
+    client = TestClient(app)
+
+    # 1. Mode switch to operator_approval
+    r_mode = client.post("/api/policy/mode", json={"mode": "operator_approval"})
+    assert r_mode.status_code == 200
+    assert r_mode.json()["mode"] == "operator_approval"
+
+    # 2. Medium-risk action in operator_approval mode requires human approval
+    r_act = client.post("/api/remediation/authorize", json={
+        "action_type": "scale_replicas",
+        "target": "deployment/web",
+        "reason": "Traffic spike mitigation",
+    })
+    assert r_act.status_code == 200
+    assert r_act.json()["authorized"] is False
+    assert r_act.json()["result"] == "NEEDS_APPROVAL"
+
+    # 3. Explicit operator approved execution
+    r_act_approved = client.post("/api/remediation/authorize", json={
+        "action_type": "scale_replicas",
+        "target": "deployment/web",
+        "reason": "Traffic spike mitigation",
+        "operator_approved": True,
+    })
+    assert r_act_approved.status_code == 200
+    assert r_act_approved.json()["authorized"] is True
+
+    # 4. Target-aware recovery check for thermal_guardian
+    r_verify_thermal = client.post("/api/repair/verify_recovery", json={
+        "target": "thermal_guardian",
+    })
+    assert r_verify_thermal.status_code == 200
+    assert r_verify_thermal.json()["status"] == "CONFIRMED"

@@ -179,7 +179,7 @@ class IsolatedWorkspaceManager:
         )
 
         # 3. Build sanitized environment
-        sanitized_env = self._build_sanitized_env()
+        sanitized_env = self._build_sanitized_env(ws_dir)
 
         # 4. Run test commands
         commands = test_commands or ["pytest -q"]
@@ -235,7 +235,7 @@ class IsolatedWorkspaceManager:
         if ws_dir.exists():
             shutil.rmtree(ws_dir, ignore_errors=True)
 
-    def _build_sanitized_env(self) -> dict[str, str]:
+    def _build_sanitized_env(self, ws_dir: Path | None = None) -> dict[str, str]:
         """Strips all sensitive keys and tokens from the execution environment."""
         sanitized = {}
         for k, v in os.environ.items():
@@ -247,4 +247,6 @@ class IsolatedWorkspaceManager:
         if Path(venv_bin).exists():
             sanitized["PATH"] = f"{venv_bin}:{sanitized.get('PATH', '')}"
             sanitized["VIRTUAL_ENV"] = str(self.base_repo_dir / ".venv")
+        if ws_dir:
+            sanitized["PYTHONPATH"] = f"{str(ws_dir)}:{sanitized.get('PYTHONPATH', '')}".rstrip(":")
         return sanitized

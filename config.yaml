@@ -28,7 +28,7 @@ models:
   repairer: qwen2.5-coder:1.5b
   ollama_url: http://127.0.0.1:11434
   inference_timeout_s: 120
-  gemini_model: gemini-2.5-flash
+  gemini_model: gemini-flash-latest
   gemini_max_requests_per_incident: 1
   gemini_max_requests_per_hour: 6
   gemini_max_input_chars: 20000
