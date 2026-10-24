@@ -531,7 +531,7 @@ def create_app(ctx: AppContext) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         ctx.events.emit("demo", f"Simulated override applied: {req.kind}",
-                        "warning", kind=req.kind)
+                        "warning", override_kind=req.kind)
         return {"ok": True, "active_overrides": list(ctx.overrides.active())}
 
     @app.post("/api/admin/shutdown")
@@ -543,6 +543,7 @@ def create_app(ctx: AppContext) -> FastAPI:
         return {"requested": True}
 
     # -------------------------------------------------------------- frontend
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static_assets")
     app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True),
               name="static")
     return app

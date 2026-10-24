@@ -3,74 +3,273 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Aegis AI — Operations</title>
+<title>Aegis AI — Autonomous Infrastructure Platform</title>
 <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
+
 <header class="topbar">
-  <div class="brand"><span class="logo">⛨</span> Aegis <small id="ver"></small></div>
-  <div class="health" id="health"><span class="dot dot-warn"></span><span>connecting…</span></div>
+  <div class="brand">
+    <span class="logo">⛨</span> Aegis AI <small id="ver">0.1.0</small>
+  </div>
+  <div class="health" id="health">
+    <span class="dot dot-warn"></span><span>connecting…</span>
+  </div>
+
+  <nav class="nav-tabs" id="navTabs">
+    <button class="nav-btn active" data-tab="overview">Overview</button>
+    <button class="nav-btn" data-tab="hardware">Hardware</button>
+    <button class="nav-btn" data-tab="workloads">Docker &amp; K8s</button>
+    <button class="nav-btn" data-tab="ai">AI Infrastructure</button>
+    <button class="nav-btn" data-tab="incidents">Incidents</button>
+    <button class="nav-btn" data-tab="engineering">Devin &amp; Repair</button>
+    <button class="nav-btn" data-tab="policy">Policy &amp; Audit</button>
+  </nav>
+
   <div class="spacer"></div>
-  <label class="switch" title="Monitoring-only shows incidents & alerts; policy-autonomous enables bounded automatic responses">
+
+  <label class="switch" title="Monitoring-only runs dry-run evaluations; policy-autonomous enables bounded automatic remediations">
     <input type="checkbox" id="modeToggle">
     <span class="slider"></span>
     <span id="modeLabel" class="mode-label">monitoring_only</span>
   </label>
-  <button id="estopBtn" class="btn danger" title="Blocks new autonomous remediation actions; telemetry and alerting stay active">Emergency stop</button>
+  <button id="estopBtn" class="btn danger" title="Blocks all autonomous remediations across the host">Emergency Stop</button>
 </header>
 
 <main>
-  <section class="cards" id="cards">
-    <div class="card" id="card-cpu"><h3>CPU</h3><div class="big" id="cpuVal">–</div><div class="sub" id="cpuSub"></div></div>
-    <div class="card" id="card-mem"><h3>Memory</h3><div class="big" id="memVal">–</div><div class="sub" id="memSub"></div></div>
-    <div class="card" id="card-thermal"><h3>Thermal Guardian</h3>
-      <div class="big" id="thermalState">–</div><div class="sub" id="thermalSub"></div>
-      <div class="chip-row" id="thermalQual"></div>
+
+  <!-- TAB 1: OVERVIEW -->
+  <section class="tab-content active" id="tab-overview">
+    <div id="incidentBanner" class="alert-banner" style="display:none;"></div>
+
+    <div class="cards">
+      <div class="card" id="card-cpu">
+        <h3>CPU Utilization</h3>
+        <div class="big" id="cpuVal">–</div>
+        <div class="sub" id="cpuSub"></div>
+      </div>
+      <div class="card" id="card-mem">
+        <h3>RAM Usage</h3>
+        <div class="big" id="memVal">–</div>
+        <div class="sub" id="memSub"></div>
+      </div>
+      <div class="card" id="card-thermal">
+        <h3>Thermal Guardian</h3>
+        <div class="big" id="thermalState">–</div>
+        <div class="sub" id="thermalSub"></div>
+        <div class="chip-row" id="thermalQual"></div>
+      </div>
+      <div class="card" id="card-disk">
+        <h3>Storage</h3>
+        <div class="big" id="diskVal">–</div>
+        <div class="sub" id="diskSub"></div>
+      </div>
+      <div class="card" id="card-net">
+        <h3>Network I/O</h3>
+        <div class="big" id="netVal">–</div>
+        <div class="sub" id="netSub"></div>
+      </div>
+      <div class="card" id="card-gpu">
+        <h3>GPU Health</h3>
+        <div class="big" id="gpuVal">–</div>
+        <div class="sub" id="gpuSub"></div>
+      </div>
     </div>
-    <div class="card" id="card-disk"><h3>Disks</h3><div class="big" id="diskVal">–</div><div class="sub" id="diskSub"></div></div>
-    <div class="card" id="card-net"><h3>Network</h3><div class="big" id="netVal">–</div><div class="sub" id="netSub"></div></div>
+
+    <div class="grid-2">
+      <div class="panel">
+        <h2>Live System Telemetry</h2>
+        <canvas id="chart-main" height="200" aria-label="System History Chart"></canvas>
+        <div class="legend"><span class="k cpu"></span> CPU % &nbsp; <span class="k mem"></span> RAM %</div>
+      </div>
+      <div class="panel">
+        <h2>Autonomous Engine Activity <span class="live-dot" title="Live stream"></span></h2>
+        <div class="events" id="events"></div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="panel">
+        <h2>Active Workloads &amp; Orchestration</h2>
+        <div id="quickWorkloads" class="summary-list"></div>
+      </div>
+      <div class="panel">
+        <h2>Recent Remediation &amp; Recovery Outcomes</h2>
+        <div id="quickActions" class="summary-list"></div>
+      </div>
+    </div>
   </section>
 
-  <section class="grid-2">
-    <div class="panel">
-      <h2>System history</h2>
-      <canvas id="chart-main" height="200" aria-label="CPU and memory history chart"></canvas>
-      <div class="legend"><span class="k cpu"></span> CPU % &nbsp; <span class="k mem"></span> RAM %</div>
+  <!-- TAB 2: HARDWARE & SENSORS -->
+  <section class="tab-content" id="tab-hardware">
+    <div class="grid-2">
+      <div class="panel">
+        <h2>Hardware Temperature Sensors</h2>
+        <div id="tempList" class="temp-list"></div>
+      </div>
+      <div class="panel">
+        <h2>Storage &amp; Filesystem Partitions</h2>
+        <table class="tbl" id="storageTbl">
+          <thead><tr><th>Mount</th><th>Device</th><th>Used</th><th>Free</th><th>Total</th><th>Used %</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
-    <div class="panel">
-      <h2>Temperatures <span class="muted" id="tempHint"></span></h2>
-      <div id="tempList" class="temp-list"></div>
-    </div>
-  </section>
 
-  <section class="grid-2">
+    <div class="grid-2">
+      <div class="panel">
+        <h2>Linux Kernel PSI (Pressure Stall Information)</h2>
+        <div id="psiContainer" class="summary-list"></div>
+      </div>
+      <div class="panel">
+        <h2>Host Hardware &amp; Software Inventory</h2>
+        <div id="inventoryContainer" class="summary-list"></div>
+      </div>
+    </div>
+
     <div class="panel">
-      <h2>Sensor inventory</h2>
+      <h2>Complete Sensor Registry</h2>
       <table class="tbl" id="sensorTbl">
-        <thead><tr><th>Sensor</th><th>Kind</th><th>Source</th><th>Value</th><th>Validity</th><th>Updated</th></tr></thead>
+        <thead><tr><th>Sensor ID</th><th>Kind</th><th>Source</th><th>Value</th><th>Validity</th><th>Updated</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
+  </section>
+
+  <!-- TAB 3: DOCKER & KUBERNETES -->
+  <section class="tab-content" id="tab-workloads">
     <div class="panel">
-      <h2>Recent events <span class="live-dot" title="live stream"></span></h2>
-      <div class="events" id="events"></div>
+      <div class="panel-header">
+        <h2>Docker Containers</h2>
+        <button class="btn" id="refreshDockerBtn">Refresh Containers</button>
+      </div>
+      <table class="tbl" id="dockerTbl">
+        <thead><tr><th>Container</th><th>Image</th><th>Status</th><th>Health</th><th>Restarts</th><th>Memory</th><th>CPU</th><th>Actions</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="grid-2">
+      <div class="panel">
+        <h2>Kubernetes Nodes &amp; Deployments</h2>
+        <div id="k8sOverview" class="summary-list"></div>
+      </div>
+      <div class="panel">
+        <h2>Kubernetes Pods</h2>
+        <div id="k8sPods" class="summary-list"></div>
+      </div>
+    </div>
+
+    <div class="panel" id="logViewerPanel" style="display:none;">
+      <div class="panel-header">
+        <h2 id="logViewerTitle">Container Logs</h2>
+        <button class="btn" id="closeLogsBtn">Close Logs</button>
+      </div>
+      <pre class="log-box" id="logViewerContent"></pre>
     </div>
   </section>
 
-  <section class="panel demo" id="demoPanel">
-    <h2>Simulated fault injection <span class="tag">SIMULATED</span></h2>
-    <p class="muted">Injected sensor values exist for demos and tests. They are separate from real hardware telemetry, always labelled <code>SIMULATED_OVERRIDE</code>, and only address-safe policy actions are permitted from them.</p>
-    <div class="btn-row" id="demoBtns"></div>
-    <div id="demoActive" class="muted"></div>
+  <!-- TAB 4: AI INFRASTRUCTURE -->
+  <section class="tab-content" id="tab-ai">
+    <div class="grid-2">
+      <div class="panel">
+        <h2>Local Inference (Ollama)</h2>
+        <div id="ollamaStatus" class="summary-list"></div>
+      </div>
+      <div class="panel">
+        <h2>Active Models in VRAM / RAM</h2>
+        <div id="activeModels" class="summary-list"></div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="panel">
+        <h2>Local AI Processes &amp; Contention</h2>
+        <div id="aiProcs" class="summary-list"></div>
+      </div>
+      <div class="panel">
+        <h2>Devin Repair Engineer Status</h2>
+        <div id="devinStatusBox" class="summary-list"></div>
+      </div>
+    </div>
   </section>
 
-  <noscript>Aegis dashboard requires JavaScript to fetch live API data.</noscript>
+  <!-- TAB 5: INCIDENTS & DIAGNOSIS -->
+  <section class="tab-content" id="tab-incidents">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Incident Timeline &amp; State Management</h2>
+      </div>
+      <table class="tbl" id="incidentsTbl">
+        <thead><tr><th>Incident ID</th><th>Category</th><th>Severity</th><th>Title</th><th>State</th><th>Created</th><th>Action</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="panel" id="incidentDetailPanel" style="display:none;">
+      <div class="panel-header">
+        <h2 id="incDetailTitle">Incident Details</h2>
+        <button class="btn info" id="runDiagBtn">Diagnose with AI</button>
+      </div>
+      <div id="incDetailContent"></div>
+    </div>
+  </section>
+
+  <!-- TAB 6: DEVIN & REPAIR PIPELINE -->
+  <section class="tab-content" id="tab-engineering">
+    <div class="grid-2">
+      <div class="panel">
+        <h2>Devin Engineering Tasks</h2>
+        <div id="devinTasksList" class="summary-list"></div>
+      </div>
+      <div class="panel">
+        <h2>GitHub Pull Requests</h2>
+        <div id="githubStatusBox" class="summary-list"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Isolated Patch Validation Runner</h2>
+      <p class="muted">Test patches safely inside an ephemeral isolated workspace with sanitized environment variables.</p>
+      <div class="form-row">
+        <input type="text" id="valTaskId" placeholder="Task ID (e.g. TASK-001)" class="txt-input">
+        <button class="btn info" id="runValidationBtn">Run Isolated Validation</button>
+      </div>
+      <textarea id="valPatchText" class="code-area" placeholder="Paste unified git patch here..."></textarea>
+      <div id="valResultBox" style="margin-top:10px;"></div>
+    </div>
+  </section>
+
+  <!-- TAB 7: POLICY, AUDIT & SIMULATION -->
+  <section class="tab-content" id="tab-policy">
+    <div class="grid-2">
+      <div class="panel">
+        <h2>Remediation Safety Policies</h2>
+        <div id="policyInfo" class="summary-list"></div>
+      </div>
+      <div class="panel demo">
+        <h2>Simulated Fault Injection <span class="tag">SIMULATED</span></h2>
+        <p class="muted">Simulated overrides verify deterministic safety controllers without affecting production workloads. All injected points are tagged <code>SIMULATED_OVERRIDE</code>.</p>
+        <div class="btn-row" id="demoBtns"></div>
+        <div id="demoActive" class="muted" style="margin-top:8px;"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Audit Log &amp; Safety Trail</h2>
+      <table class="tbl" id="auditTbl">
+        <thead><tr><th>Timestamp</th><th>Actor</th><th>Action</th><th>Subject</th><th>Detail</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
 </main>
 
 <footer>
-  <span id="footNote"></span>
+  <span id="footNote">Aegis AI — Autonomous Infrastructure Engineer</span>
   <span class="spacer"></span>
-  <a href="/api/docs" target="_blank">API docs</a>
+  <a href="/api/docs" target="_blank">Interactive API Docs (Swagger)</a>
 </footer>
 
 <script src="/static/app.js"></script>
