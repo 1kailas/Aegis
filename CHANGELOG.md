@@ -4,6 +4,28 @@ All notable changes to the **Aegis AI** platform are documented in this file in 
 
 ---
 
+## 2026-10-25T04:35:00+05:30 — Aegis AI v3.2.0: Real-Time Incident Causality & Service Topology with Full Auto-PR Loop (Kea-Inspired)
+
+- **Added & Changed:**
+  - **Incident Causality & Service Topology Engine (`aegis/intelligence/causality.py`)**:
+    - Inspired by `mohi-devhub/kea`, implemented a deterministic causality engine and service dependency topology graph that automates the critical first hour of incident response.
+    - **Deterministic Root-Cause Candidate Ranking (Anti-Red Herring)**:
+      - Evaluates failure candidates using per-factor scoring: `dependency_path_score` (1.0 vs 0.0), `temporal_proximity_score`, and `error_signature_match`.
+      - Explicitly identifies and rejects red-herring decoy changes (e.g. unrelated deployments on isolated services like notifications) with clear reason codes: `NO_DEPENDENCY_PATH`.
+    - **Closing the Gap that Kea Left Open**:
+      - While Kea stopped at proposing a diff hash without creating git branches or PRs (`backend/app/fix/apply.py` raising "not enabled"), Aegis connects the causality engine to real autonomous PR code synthesis (via Groq/Devin), commits the fix to `aegis/repair-{id}`, creates the remote GitHub PR, and tests the live health probe to close the recovery loop.
+  - **API Endpoint `GET /api/incidents/{incident_id}/causality`**:
+    - Exposes the full causal topology nodes/edges, blast radius score, ranked root-cause candidates with factor scores, rejected decoys with reason codes, predict-then-verify impact, and auto-PR metadata.
+  - **Interactive Dashboard UI (`aegis/static/app.js` & `index.html`)**:
+    - Integrated an interactive service dependency chain in the Incident Drawer showing traffic routing, failing components (🔴), degraded downstream queues (🟡), and healthy backends (🟢).
+    - Rendered the Root-Cause Ranking & Decoy Rejection cards with confidence percentages and factor score breakdowns.
+    - Embedded the Predict-Then-Verify box and syntax-highlighted Auto-PR diff viewer.
+  - **Comprehensive Test Suite**:
+    - Added `tests/test_causality.py` verifying deterministic ranking, decoy rejection, causality API endpoints, and auto-PR integration.
+    - Test suite now at **99 passing tests** (100% pass rate).
+
+---
+
 ## 2026-10-25T04:30:00+05:30 — Aegis AI v3.2.0: Groq Autonomous PR & Patch Synthesis Engine (Rate-Limit Guarded)
 
 - **Added & Changed:**

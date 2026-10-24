@@ -387,6 +387,13 @@ def create_app(ctx: AppContext) -> FastAPI:
         )
         return diag.as_dict()
 
+    @app.get("/api/incidents/{incident_id}/causality")
+    def incident_causality(incident_id: str) -> dict[str, Any]:
+        inc = ctx.incidents.get(incident_id)
+        if not inc:
+            raise HTTPException(status_code=404, detail="Incident not found")
+        return ctx.causality.analyze_incident(inc)
+
     # ------------------------------------------------------------- Devin Engineering
     @app.get("/api/devin/status")
     def devin_status() -> dict[str, Any]:

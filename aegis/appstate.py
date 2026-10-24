@@ -36,6 +36,7 @@ from aegis.engineering.groq_repair import GroqRepairEngine
 from aegis.engineering.recovery_verifier import RecoveryVerifier
 from aegis.engineering.workspace import IsolatedWorkspaceManager
 from aegis.intelligence.benchmarking import ModelBenchmarker, ModelOptimizer
+from aegis.intelligence.causality import CausalityEngine
 from aegis.intelligence.diagnosis import IncidentDiagnoser
 from aegis.intelligence.forecasting import TelemetryForecaster
 from aegis.intelligence.model_recommender import ModelRecommender
@@ -153,6 +154,7 @@ class AppContext:
             hardware_model=config.models.hardware_model,
             max_gemini_requests_per_hour=config.models.gemini_max_requests_per_hour,
         )
+        self.causality = CausalityEngine(self.db)
         self.groq_repair = GroqRepairEngine(
             api_key=config.groq_api_key,
             model=config.models.groq_model,

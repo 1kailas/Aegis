@@ -1201,6 +1201,12 @@ async function selectIncident(iid) {
       : (["VALIDATING", "PR_OPENED", "RECOVERY_VERIFIED", "RESOLVED"].includes(inc.state));
     const s6Done = inc.state === "RECOVERY_VERIFIED" || inc.state === "RESOLVED";
 
+    let causality = null;
+    try {
+      const cRes = await fetch(`/api/incidents/${iid}/causality`);
+      if (cRes.ok) causality = await cRes.json();
+    } catch (_) {}
+
     $("incDetailContent").innerHTML = `
       <!-- Headline MTTR Metric Box -->
       <div class="headline-mttr-box">
@@ -1213,6 +1219,77 @@ async function selectIncident(iid) {
           <span class="badge ${inc.state === 'RECOVERY_VERIFIED' ? 'ok' : (inc.severity === 'critical' ? 'crit' : 'warn')}">${inc.state}</span>
         </div>
       </div>
+
+      ${causality ? `
+      <!-- Real-Time Service Causality, Blast Radius & Decoy Rejection -->
+      <div class="panel" style="margin-bottom:16px; background:rgba(15,19,28,0.7); border:1px solid var(--border); box-shadow:0 4px 16px rgba(0,0,0,0.3);">
+        <div class="panel-header" style="padding:10px 14px; background:rgba(20,26,38,0.6);">
+          <div>
+            <div class="panel-title flex items-center gap-8">
+              <span>🌐 Service Dependency Topology &amp; Causal Blast Radius</span>
+              <span class="badge ${causality.topology.blast_radius_score === 'HIGH' ? 'crit' : 'warn'}">Blast Radius: ${causality.topology.affected_services_count} Services Impacted</span>
+            </div>
+            <div class="panel-subtitle">Deterministic root-cause ranking over live service graph with decoy rejection &amp; Auto-PR</div>
+          </div>
+        </div>
+
+        <div style="padding:12px 14px;">
+          <!-- Visual Topology Chain -->
+          <div style="display:flex; align-items:center; gap:8px; overflow-x:auto; padding:12px; background:rgba(9,11,16,0.85); border-radius:6px; border:1px solid var(--border); margin-bottom:14px;">
+            ${(causality.topology.nodes || []).map((n, idx) => `
+              <div style="display:flex; align-items:center; gap:8px;">
+                <div style="padding:8px 12px; border-radius:6px; border:1px solid ${n.status === 'FAILING' ? 'rgba(239,68,68,0.6)' : (n.status === 'DEGRADED' ? 'rgba(245,158,11,0.5)' : (n.in_causal_path ? 'rgba(99,102,241,0.4)' : 'rgba(100,116,139,0.3)'))}; background:${n.status === 'FAILING' ? 'rgba(239,68,68,0.15)' : (n.status === 'DEGRADED' ? 'rgba(245,158,11,0.1)' : 'rgba(15,23,42,0.8)')}; text-align:center; min-width:130px;">
+                  <div style="font-size:11px; font-weight:700; color:${n.status === 'FAILING' ? '#f87171' : (n.status === 'DEGRADED' ? '#fbbf24' : '#e2e8f0')}">
+                    ${n.name}
+                  </div>
+                  <div style="font-size:9px; color:var(--text-muted); margin-top:2px;">${n.role}</div>
+                  <span class="badge ${n.status === 'FAILING' ? 'crit' : (n.status === 'DEGRADED' ? 'warn' : 'ok')}" style="font-size:9px; margin-top:4px;">${n.status}</span>
+                </div>
+                ${idx < (causality.topology.nodes.length - 1) ? `<span style="color:${n.in_causal_path ? '#f87171' : '#64748b'}; font-size:14px; font-weight:bold;">${n.in_causal_path ? '➔' : '⇢'}</span>` : ''}
+              </div>
+            `).join('')}
+          </div>
+
+          <!-- Deterministic Root-Cause Candidates & Decoy Rejection -->
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:12px; margin-bottom:12px;">
+            ${(causality.root_cause_ranking || []).map(cand => `
+              <div style="padding:12px; border-radius:6px; border:1px solid ${cand.status === 'RANKED_ROOT_CAUSE' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}; background:${cand.status === 'RANKED_ROOT_CAUSE' ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.05)'};">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                  <span style="font-size:12px; font-weight:bold; color:${cand.status === 'RANKED_ROOT_CAUSE' ? '#4ade80' : '#f87171'}">
+                    ${cand.status === 'RANKED_ROOT_CAUSE' ? '🥇 Ranked Root Cause' : '🚫 Rejected Decoy (Red Herring)'}
+                  </span>
+                  <span class="badge ${cand.status === 'RANKED_ROOT_CAUSE' ? 'ok' : 'crit'}">${Math.round(cand.factor_scores.composite_score * 100)}% Confidence</span>
+                </div>
+                <div style="font-size:11px; font-weight:600; margin-bottom:4px;">${cand.name}</div>
+                <div style="font-size:10px; color:var(--text-muted); margin-bottom:8px;">${cand.explanation}</div>
+                ${cand.rejection_reason ? `<div style="font-size:10px; color:#fca5a5; background:rgba(239,68,68,0.12); padding:6px; border-radius:4px; border-left:2px solid #ef4444; margin-bottom:6px;"><strong>Rejection Reason:</strong> ${cand.rejection_reason}</div>` : ''}
+                <div style="display:flex; gap:8px; font-size:9px; color:var(--text-muted); border-top:1px solid rgba(255,255,255,0.06); padding-top:6px;">
+                  <span>Path: <strong>${Math.round(cand.factor_scores.dependency_path_score * 100)}%</strong></span>
+                  <span>Timing: <strong>${Math.round(cand.factor_scores.temporal_proximity_score * 100)}%</strong></span>
+                  <span>Signature: <strong>${Math.round(cand.factor_scores.error_signature_match * 100)}%</strong></span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+
+          <!-- Predict & Verify + Auto PR Summary -->
+          <div style="display:flex; gap:12px; flex-wrap:wrap; background:rgba(9,11,16,0.6); padding:10px; border-radius:6px; border:1px solid var(--border); font-size:11px;">
+            <div style="flex:1; min-width:220px;">
+              <span style="color:#38bdf8; font-weight:bold;">🔮 Predict, Then Verify:</span>
+              <div style="color:var(--text-muted); margin-top:2px;">${causality.predict_and_verify.expected_outcome}</div>
+              <div style="margin-top:4px;"><span class="badge ${causality.predict_and_verify.is_verified ? 'ok' : 'warn'}">${causality.predict_and_verify.status_label}</span></div>
+            </div>
+            <div style="flex:1; min-width:220px;">
+              <span style="color:#f97316; font-weight:bold;">⚡ Autonomous PR Engine:</span>
+              <div style="color:var(--text-muted); margin-top:2px;">Branch: <code>${causality.auto_pr.branch_name}</code></div>
+              <div style="margin-top:4px;">
+                <a href="${causality.auto_pr.pull_request_url}" target="_blank" class="badge info" style="text-decoration:none;">${causality.auto_pr.pull_request_url} ↗</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      ` : ''}
 
       <!-- Autonomous 6-Stage Timeline -->
       <div class="timeline-stages">
