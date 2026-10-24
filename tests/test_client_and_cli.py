@@ -22,6 +22,7 @@ from aegis.cli.main import (
 from aegis.client.agent import (
     AegisAgent,
     get_primary_ip,
+    normalize_server_url,
     sample_host_capacity,
     sample_quick_telemetry,
 )
@@ -175,3 +176,45 @@ def test_cli_keys_and_modes(app_ctx: AppContext):
     args_estop_off = argparse.Namespace(state="off")
     assert cmd_estop(client, args_estop_off) == 0
     assert app_ctx.flags.emergency_stop is False
+
+
+def test_normalize_server_url_and_ip_support():
+    """Verify raw IP addresses and URLs are normalized consistently."""
+    assert normalize_server_url("192.168.1.100") == "http://192.168.1.100:8000"
+    assert normalize_server_url("192.168.1.100:9000") == "http://192.168.1.100:9000"
+    assert normalize_server_url("http://10.0.0.1") == "http://10.0.0.1:8000"
+    assert normalize_server_url("http://10.0.0.1:8480") == "http://10.0.0.1:8480"
+    assert normalize_server_url("https://aegis.cloud.corp") == "https://aegis.cloud.corp"
+    assert normalize_server_url("") == "http://127.0.0.1:8000"
+    assert normalize_server_url(None) == "http://127.0.0.1:8000"
+
+    # Agent automatically normalizes positional IP argument
+    agent = AegisAgent(server_url="172.16.0.5")
+    assert agent.server_url == "http://172.16.0.5:8000"
+
+
+def test_server_distribution_endpoints(app_ctx: AppContext):
+    """Verify /agent.py, /install.sh, and /api/cluster/join-info endpoints."""
+    app = create_app(app_ctx)
+    client = TestClient(app)
+
+    # 1. Download standalone agent.py
+    r_agent = client.get("/agent.py")
+    assert r_agent.status_code == 200
+    assert "class AegisAgent" in r_agent.text
+    assert "normalize_server_url" in r_agent.text
+
+    # 2. Download dynamic install.sh
+    r_install = client.get("/install.sh", headers={"Host": "192.168.1.55:8000"})
+    assert r_install.status_code == 200
+    assert "#!/usr/bin/env bash" in r_install.text
+    assert "192.168.1.55:8000" in r_install.text
+
+    # 3. Join info metadata
+    r_join = client.get("/api/cluster/join-info", headers={"Host": "10.0.0.99:8000"})
+    assert r_join.status_code == 200
+    data = r_join.json()
+    assert data["server_host"] == "10.0.0.99:8000"
+    assert "10.0.0.99:8000" in data["curl_agent_run"]
+    assert "10.0.0.99:8000" in data["curl_install_run"]
+    assert "10.0.0.99:8000" in data["cli_join"]

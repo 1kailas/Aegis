@@ -16,8 +16,9 @@ import time
 from pathlib import Path
 from typing import Any, AsyncIterator
 
-from fastapi import Depends, FastAPI, Header, HTTPException, status
-from fastapi.responses import Response, StreamingResponse
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
@@ -87,6 +88,45 @@ def _guard_state_changer(ctx: AppContext,
 def create_app(ctx: AppContext) -> FastAPI:
     app = FastAPI(title="Aegis AI", version=__version__,
                   docs_url="/api/docs", openapi_url="/api/openapi.json")
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # -------------------------------------------------------- client distribution
+    @app.get("/agent.py", response_class=PlainTextResponse)
+    def serve_agent_py() -> str:
+        agent_file = Path(__file__).resolve().parent.parent / "client" / "agent.py"
+        if agent_file.exists():
+            return agent_file.read_text(encoding="utf-8")
+        raise HTTPException(status_code=404, detail="agent.py not found")
+
+    @app.get("/install.sh", response_class=PlainTextResponse)
+    def serve_install_sh(request: Request) -> str:
+        install_file = Path(__file__).resolve().parent.parent.parent / "scripts" / "install.sh"
+        if install_file.exists():
+            content = install_file.read_text(encoding="utf-8")
+            host = request.headers.get("host", "127.0.0.1:8000")
+            return content.replace("http://127.0.0.1:8000", f"http://{host}")
+        raise HTTPException(status_code=404, detail="install.sh not found")
+
+    @app.get("/api/cluster/join-info")
+    def cluster_join_info(request: Request) -> dict[str, Any]:
+        host = request.headers.get("host", "127.0.0.1:8000")
+        url = f"http://{host}"
+        return {
+            "server_host": host,
+            "server_url": url,
+            "agent_url": f"{url}/agent.py",
+            "install_url": f"{url}/install.sh",
+            "curl_agent_run": f"curl -sSL {url}/agent.py | python3 - {host}",
+            "curl_install_run": f"curl -sSL {url}/install.sh | bash -s {host}",
+            "cli_join": f"aegis join {host}",
+        }
 
     # ------------------------------------------------------------------ health
     @app.get("/api/health")

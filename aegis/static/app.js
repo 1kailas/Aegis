@@ -476,11 +476,33 @@ window.rollbackCanary = async function(rolloutId) {
   }
 };
 
-$("copyAgentCmdBtn").addEventListener("click", () => {
-  const host = window.location.origin;
-  copySnippet(`aegis agent --server ${host}`);
-});
-$("refreshClusterBtn").addEventListener("click", refreshCluster);
+function setupClusterJoinCommands() {
+  const hostInput = $("clusterHostInput");
+  if (!hostInput) return;
+  const currentHost = window.location.host || "127.0.0.1:8000";
+  if (!hostInput.value) hostInput.value = currentHost;
+
+  const update = () => {
+    const h = hostInput.value.trim() || currentHost;
+    const origin = h.startsWith("http") ? h : `http://${h}`;
+    const cleanHost = h.replace(/^https?:\/\//, "");
+
+    const ir = $("cmdInstantRun");
+    if (ir) ir.textContent = `curl -sSL ${origin}/agent.py | python3 - ${cleanHost}`;
+
+    const si = $("cmdServiceInstall");
+    if (si) si.textContent = `curl -sSL ${origin}/install.sh | bash -s ${cleanHost}`;
+
+    const cj = $("cmdCliJoin");
+    if (cj) cj.textContent = `aegis join ${cleanHost}`;
+  };
+
+  hostInput.addEventListener("input", update);
+  update();
+}
+
+const rcb = $("refreshClusterBtn");
+if (rcb) rcb.addEventListener("click", refreshCluster);
 
 // ------------------------------------------------------------- Docker & Workloads Tab
 async function refreshDocker() {
@@ -952,6 +974,7 @@ $("pauseEventsBtn")?.addEventListener("click", () => {
 pollOverview();
 pollHistory();
 pollSensors();
+setupClusterJoinCommands();
 initSSE();
 
 setInterval(pollOverview, 3000);

@@ -4,6 +4,25 @@ All notable changes to the **Aegis AI** platform are documented in this file in 
 
 ---
 
+## 2026-10-25T00:25:00+05:30 — Zero-Friction Remote Client Joining via IP & Dynamic Server Script Serving
+
+- **Changed:**
+  - Implemented `normalize_server_url` in `aegis/client/agent.py` enabling users to pass raw IP addresses (e.g. `192.168.1.100` or `10.0.0.1:8480`) which automatically resolve to the control plane HTTP endpoint.
+  - Added positional `server_ip` argument support across `aegis-agent <IP>`, `aegis join <IP>`, and `aegis agent <IP>`.
+  - Added graceful zero-dependency fallback in `AegisAgent`: uses Python standard library (`urllib.request`, `shutil.disk_usage`, `/proc/meminfo`, `/proc/stat`, `os.getloadavg`) when `psutil` or `httpx` are not installed, enabling the agent to run on 100% of standard Linux machines without installing any third-party packages.
+  - Enabled global CORS middleware (`CORSMiddleware`) in `aegis/api/server.py` allowing cross-origin requests from any remote client device or network IP.
+  - Added server-side distribution endpoints in `aegis/api/server.py`:
+    - `GET /agent.py`: Serves the standalone, zero-dependency Python telemetry agent directly over HTTP.
+    - `GET /install.sh`: Serves a dynamic shell installer pre-configured with the server's Host address.
+    - `GET /api/cluster/join-info`: Serves connection metadata and copyable one-liner join commands.
+  - Enhanced dashboard UI (Cluster Mesh tab) with an interactive **"Connect Any Client Machine"** panel featuring real-time IP input and one-click copy buttons for instant Python run, systemd install, and CLI join.
+  - Expanded test suite `tests/test_client_and_cli.py` with `test_normalize_server_url_and_ip_support` and `test_server_distribution_endpoints`.
+- **Why:** Allows developers and SREs to run Aegis on any client device simply by pointing to the server's IP address, with zero manual setup or dependency compilation.
+- **Validation:** Executed full test suite: `PYTHONPATH=. .venv/bin/pytest tests/ -v`. All 58 tests passed in 9.25s.
+- **Limitations:** None.
+
+---
+
 ## 2026-10-25T00:15:00+05:30 — Production Client-Server Architecture, Unified CLI, Automated Installer & SRE UI Overhaul
 
 - **Changed:**

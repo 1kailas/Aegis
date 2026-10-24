@@ -174,11 +174,50 @@
 
   <!-- TAB 2: CLUSTER MESH & CANARIES -->
   <section class="tab-content" id="tab-cluster">
+    <!-- Quick Join Any Client Machine -->
+    <div class="panel" style="border-left: 3px solid var(--ok); background: #0c121e;">
+      <div class="panel-header">
+        <h2>Connect Any Client Machine to this Server</h2>
+        <div class="panel-actions">
+          <span style="font-size:0.75rem; color:var(--muted);">Server IP / Host:</span>
+          <input type="text" id="clusterHostInput" class="search-input" style="width:180px; font-family:var(--font-mono); font-weight:600;" placeholder="127.0.0.1:8000">
+        </div>
+      </div>
+      <p style="font-size:0.78rem; color:var(--muted); margin: 0 0 12px 0;">
+        Run any of these commands on your remote client device (laptop, cloud VM, bare-metal server). It automatically discovers hardware and streams telemetry heartbeats into this cluster control plane:
+      </p>
+
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="background:var(--bg); border:1px solid var(--line); border-radius:4px; padding:8px 12px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-size:0.7rem; color:var(--info); font-weight:600; text-transform:uppercase;">Option 1: Instant Zero-Install Run (Vanilla Python 3)</div>
+            <code id="cmdInstantRun" style="color:var(--text-bright); font-size:0.8rem;">curl -sSL http://127.0.0.1:8000/agent.py | python3 - 127.0.0.1</code>
+          </div>
+          <button class="btn sm" onclick="copySnippet($('cmdInstantRun').textContent)">Copy</button>
+        </div>
+
+        <div style="background:var(--bg); border:1px solid var(--line); border-radius:4px; padding:8px 12px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-size:0.7rem; color:var(--ok); font-weight:600; text-transform:uppercase;">Option 2: Automated Service Install (CLI &amp; systemd daemon)</div>
+            <code id="cmdServiceInstall" style="color:var(--text-bright); font-size:0.8rem;">curl -sSL http://127.0.0.1:8000/install.sh | bash -s 127.0.0.1</code>
+          </div>
+          <button class="btn sm" onclick="copySnippet($('cmdServiceInstall').textContent)">Copy</button>
+        </div>
+
+        <div style="background:var(--bg); border:1px solid var(--line); border-radius:4px; padding:8px 12px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-size:0.7rem; color:var(--warn); font-weight:600; text-transform:uppercase;">Option 3: Aegis CLI Join (If aegis is already installed)</div>
+            <code id="cmdCliJoin" style="color:var(--text-bright); font-size:0.8rem;">aegis join 127.0.0.1</code>
+          </div>
+          <button class="btn sm" onclick="copySnippet($('cmdCliJoin').textContent)">Copy</button>
+        </div>
+      </div>
+    </div>
+
     <div class="panel">
       <div class="panel-header">
         <h2>Distributed Cluster Mesh Nodes</h2>
         <div class="panel-actions">
-          <button class="btn sm" id="copyAgentCmdBtn" title="Copy agent run command">Copy Agent CLI Command</button>
           <button class="btn sm primary" id="refreshClusterBtn">Refresh Nodes</button>
         </div>
       </div>

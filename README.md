@@ -2,7 +2,7 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Version: 2.0.0](https://img.shields.io/badge/version-2.0.0-blue.svg)]()
-[![Tests Passing](https://img.shields.io/badge/tests-56%2F56%20passed-brightgreen.svg)]()
+[![Tests Passing](https://img.shields.io/badge/tests-58%2F58%20passed-brightgreen.svg)]()
 [![Prometheus Ready](https://img.shields.io/badge/prometheus-%2Fmetrics-orange.svg)]()
 [![Security: Hardened](https://img.shields.io/badge/security-hardened-blue.svg)](SECURITY.md)
 [![Agents: Devin Protocol](https://img.shields.io/badge/agents-Devin%20protocol-purple.svg)](AGENTS.md)
@@ -247,14 +247,23 @@ aegis-server --host 0.0.0.0 --port 8000
 - OpenAPI Docs: **`http://localhost:8000/api/docs`**
 - Prometheus Scrape: **`http://localhost:8000/metrics`**
 
-### 2. Aegis Agent (`aegis-agent` or `aegis agent`)
-Lightweight background daemon installed on worker nodes. Gathers local system metrics and streams authenticated telemetry heartbeats into the cluster mesh:
+### 2. Aegis Agent (`aegis-agent` or `aegis join`)
+Lightweight daemon running on ANY client device. Just give the server's IP address, and it immediately normalizes the endpoint, discovers local CPU/RAM/disks/GPUs, registers the node, and streams heartbeats:
+
 ```bash
-# Basic run pointing to control plane:
-aegis-agent --server http://192.168.1.50:8000
+# Option A: Instant zero-install run (No pip/git needed, pure Python 3 on any machine)
+curl -sSL http://<SERVER_IP>:8000/agent.py | python3 - <SERVER_IP>
+
+# Option B: Automated service install (Installs systemd unit + CLI)
+curl -sSL http://<SERVER_IP>:8000/install.sh | bash -s <SERVER_IP>
+
+# Option C: Pass just the IP directly to the binary
+aegis-agent 192.168.1.50
+# Or using the unified CLI:
+aegis join 192.168.1.50
 
 # With RBAC token and custom labels:
-aegis-agent --server http://192.168.1.50:8000 --token aegis_sec_... --labels role=gpu-worker,zone=us-east-1
+aegis-agent 192.168.1.50 --token aegis_sec_... --labels role=gpu-worker,zone=us-east-1
 ```
 
 ### 3. Aegis Developer CLI (`aegis`)
@@ -397,6 +406,6 @@ PYTHONPATH=. .venv/bin/pytest tests/ -v
 - **`tests/test_phase5.py` (4 tests)**: End-to-end autonomous lifecycle simulation (Detect → Diagnose → Plan → Authorize → Validate → PR → Verify Recovery), injection security hardening, operator approval mode enforcement, target-aware live probe verification, and static dashboard & OpenAPI delivery.
 - **`tests/test_v15.py` (5 tests)**: Predictive telemetry forecasting (OLS linear regression & TTE calculations), closed-loop autonomous self-healing engine (triage, auto-remediation, and dead-letter escalation), synthetic HTTP/TCP probers, Prometheus metrics exposition line protocol, and v1.5 API endpoints.
 - **`tests/test_v20.py` (5 tests)**: Distributed cluster mesh node lifecycle and draining, automated canary verification and closed-loop rollbacks, multi-channel webhook alert storm debouncing, cryptographic RBAC token generation & permission enforcement, and v2.0 API routes.
-- **`tests/test_client_and_cli.py` (5 tests)**: Aegis Agent host telemetry & capacity sampling, cluster mesh registration and authenticated heartbeats, graceful node draining on shutdown, unified `aegis` CLI subcommands (`status`, `nodes`, `incidents`, `canary`, `keys`, `mode`, `estop`).
+- **`tests/test_client_and_cli.py` (7 tests)**: Aegis Agent host telemetry & capacity sampling, cluster mesh registration and authenticated heartbeats, graceful node draining on shutdown, unified `aegis` CLI subcommands (`status`, `nodes`, `incidents`, `canary`, `keys`, `mode`, `estop`, `join`), `normalize_server_url` IP parsing, and server distribution endpoints (`/agent.py`, `/install.sh`, `/api/cluster/join-info`).
 
-**Result: 56 passed in 8.8 seconds.**
+**Result: 58 passed in 9.2 seconds.**

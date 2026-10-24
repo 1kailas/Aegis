@@ -27,6 +27,7 @@ from typing import Any
 import httpx
 
 from aegis import __version__
+from aegis.client.agent import normalize_server_url
 
 
 # Terminal colors
@@ -40,10 +41,11 @@ RESET = "\033[0m"
 
 
 def get_client(server_url: str, token: str | None = None) -> httpx.Client:
+    url = normalize_server_url(server_url)
     headers = {"Content-Type": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    return httpx.Client(base_url=server_url.rstrip("/"), headers=headers, timeout=10.0)
+    return httpx.Client(base_url=url, headers=headers, timeout=10.0)
 
 
 def fmt_severity(sev: str) -> str:
@@ -445,13 +447,23 @@ def main(argv: list[str] | None = None) -> None:
     p_server.add_argument("--db", default=None)
     p_server.add_argument("--log-level", default=None)
 
-    # aegis agent
+    # aegis agent [server_ip]
     p_agent = sub.add_parser("agent", help="Start the node telemetry agent daemon")
+    p_agent.add_argument("server_ip", nargs="?", default=None, help="Server IP or URL (e.g. 192.168.1.100 or http://192.168.1.100:8000)")
     p_agent.add_argument("--node-id", default=None)
     p_agent.add_argument("--interval", "-i", type=float, default=5.0)
     p_agent.add_argument("--labels", "-l", default="role=worker")
     p_agent.add_argument("--once", action="store_true")
     p_agent.add_argument("--no-drain", action="store_true")
+
+    # aegis join <server_ip>
+    p_join = sub.add_parser("join", help="Join a remote Aegis Server cluster mesh")
+    p_join.add_argument("server_ip", help="Server IP or URL (e.g. 192.168.1.100 or http://192.168.1.100:8000)")
+    p_join.add_argument("--node-id", default=None)
+    p_join.add_argument("--interval", "-i", type=float, default=5.0)
+    p_join.add_argument("--labels", "-l", default="role=worker")
+    p_join.add_argument("--once", action="store_true")
+    p_join.add_argument("--no-drain", action="store_true")
 
     # aegis status
     sub.add_parser("status", help="Show overview of health, guardians and cluster")
@@ -510,8 +522,10 @@ def main(argv: list[str] | None = None) -> None:
         run(ctx, host=args.host, port=args.port)
         return
 
-    if args.subcommand == "agent":
-        from aegis.client.agent import AegisAgent
+    if args.subcommand in ("agent", "join"):
+        from aegis.client.agent import AegisAgent, normalize_server_url
+        server_target = getattr(args, "server_ip", None) or args.server or os.getenv("AEGIS_SERVER_URL", "http://127.0.0.1:8000")
+        server_target = normalize_server_url(server_target)
         labels: dict[str, str] = {}
         if args.labels:
             for part in args.labels.split(","):
@@ -519,7 +533,7 @@ def main(argv: list[str] | None = None) -> None:
                     k, v = part.split("=", 1)
                     labels[k.strip()] = v.strip()
         agent = AegisAgent(
-            server_url=args.server,
+            server_url=server_target,
             token=args.token,
             node_id=args.node_id,
             labels=labels,
