@@ -65,6 +65,20 @@
 ═══════════════════════════════════════════════════════════ -->
 <section class="tab-content active" id="tab-overview">
 
+  <!-- Live Hackathon Control Toolbar -->
+  <div class="demo-actions-bar">
+    <div class="flex items-center gap-12">
+      <span class="badge info" style="letter-spacing:0.5px;">ON-CALL AGENT</span>
+      <span style="font-size:13px; font-weight:600; color:var(--text-primary);">Autonomous Incident Triage &amp; Repair</span>
+    </div>
+    <div class="demo-btn-group">
+      <button class="btn sm primary" id="btnOpenConnectTarget">+ Connect Website</button>
+      <button class="btn sm warn" id="btnTriggerTargetBug" title="Simulates a real 500 error in demo target app">Simulate 500 Outage</button>
+      <button class="btn sm danger" id="btnTestSafety" title="Submits 'rm -rf /' to verify deterministic 403 rejection">Safety Test (403)</button>
+      <button class="btn sm" id="btnSimulateLoad" title="Triggers deterministic VRAM/memory eviction via ResourceGuardian">Simulate Load</button>
+    </div>
+  </div>
+
   <!-- Active Incident Alert -->
   <div class="incident-banner" id="incidentBanner">
     <span class="status-dot crit"></span>
@@ -114,6 +128,71 @@
       <div class="metric-label">Accelerators</div>
       <div class="metric-val" id="gpuVal">–</div>
       <div class="metric-sub" id="gpuSub">–</div>
+    </div>
+  </div>
+
+  <!-- Connected Targets Panel -->
+  <div class="panel" id="targetsPanel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Production Web Targets &amp; Endpoints</div>
+        <div class="panel-subtitle">Aegis monitors any website or app over HTTP every 5s, triggering autonomous incident triage on 5xx or latency breaches</div>
+      </div>
+      <div class="panel-actions">
+        <button class="btn sm primary" id="toggleTargetFormBtn">+ Connect Website</button>
+        <button class="btn sm" id="refreshTargetsBtn">Refresh</button>
+      </div>
+    </div>
+
+    <!-- Inline Add Target Form -->
+    <div id="targetFormWrap" style="display:none; padding:16px 18px; background:var(--bg-subtle); border-bottom:1px solid var(--border);">
+      <div style="font-weight:600; font-size:13px; margin-bottom:10px; color:var(--text-primary);">Register New Website or API Endpoint</div>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; margin-bottom:12px;">
+        <div>
+          <label class="text-xs text-muted" style="display:block; margin-bottom:4px;">Target Name</label>
+          <input type="text" class="search-input" id="tgtName" placeholder="e.g. Checkout Microservice" style="width:100%;">
+        </div>
+        <div>
+          <label class="text-xs text-muted" style="display:block; margin-bottom:4px;">Website / Service URL</label>
+          <input type="text" class="search-input" id="tgtUrl" placeholder="http://127.0.0.1:5050" style="width:100%;">
+        </div>
+        <div>
+          <label class="text-xs text-muted" style="display:block; margin-bottom:4px;">Health Path</label>
+          <input type="text" class="search-input" id="tgtHealth" placeholder="/health" value="/health" style="width:100%;">
+        </div>
+        <div>
+          <label class="text-xs text-muted" style="display:block; margin-bottom:4px;">GitHub Repo URL (for Devin)</label>
+          <input type="text" class="search-input" id="tgtRepo" placeholder="https://github.com/1kailas/Aegis" style="width:100%;">
+        </div>
+        <div>
+          <label class="text-xs text-muted" style="display:block; margin-bottom:4px;">Log Source (container / file)</label>
+          <input type="text" class="search-input" id="tgtLog" placeholder="optional (e.g. demo-app)" style="width:100%;">
+        </div>
+      </div>
+      <div class="flex items-center gap-8">
+        <button class="btn sm primary" id="submitTargetBtn">Connect &amp; Monitor</button>
+        <button class="btn sm" id="cancelTargetBtn">Cancel</button>
+      </div>
+    </div>
+
+    <div class="tbl-wrap">
+      <table class="tbl" id="targetsTbl">
+        <thead>
+          <tr>
+            <th>Target Name</th>
+            <th>Endpoint URL</th>
+            <th>Health Path</th>
+            <th>Status</th>
+            <th>Latency</th>
+            <th>Failures</th>
+            <th>GitHub Repository</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:16px;">Loading targets...</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
@@ -525,13 +604,19 @@
     </div>
   </div>
 
-  <!-- Incident Detail Drawer -->
+  <!-- Incident Detail & Autonomous Timeline Drawer -->
   <div class="panel" id="incidentDetailPanel" style="display:none;">
     <div class="panel-header">
-      <div class="panel-title" id="incDetailTitle">Incident Inspection</div>
+      <div>
+        <div class="panel-title" id="incDetailTitle">Incident Inspection &amp; Autonomous Timeline</div>
+        <div class="panel-subtitle">End-to-end lifecycle: Detection -> Gemini Diagnosis -> Devin Delegation -> PR -> Recovery Verification</div>
+      </div>
       <div class="panel-actions">
-        <button class="btn sm" id="copyIncCliBtn">Copy CLI Command</button>
-        <button class="btn sm primary" id="runDiagBtn">Diagnose with AI</button>
+        <button class="btn sm" id="copyIncCliBtn">Copy CLI</button>
+        <button class="btn sm primary" id="runDiagBtn">Diagnose (Gemini Tier 2)</button>
+        <button class="btn sm ok" id="delegateDevinBtn">Delegate to Devin</button>
+        <button class="btn sm" id="pollDevinBtn">Poll Devin Status</button>
+        <button class="btn sm info" id="closeLoopBtn">Verify &amp; Close Loop</button>
         <button class="btn sm" id="closeIncDetailBtn">Close</button>
       </div>
     </div>
@@ -713,6 +798,34 @@
           </div>
           <button class="btn xs" onclick="copySnippet('aegis keys create --name worker --role NODE_AGENT')">Copy</button>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Safety Guardrail Test Modal -->
+<div class="modal-backdrop" id="safetyModal">
+  <div class="modal" style="max-width:540px;">
+    <div class="modal-header">
+      <div class="flex items-center gap-8">
+        <span class="badge crit" style="font-weight:700;">HTTP 403 FORBIDDEN</span>
+        <h2 style="font-size:15px; margin:0;">Deterministic Policy Gate Violation</h2>
+      </div>
+      <button class="btn sm icon" id="closeSafetyModalBtn" aria-label="Close">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="safetyModalBody">
+      <div style="background:rgba(244,63,94,0.08); border:1px solid var(--crit-border); border-radius:var(--radius-md); padding:14px 16px; margin-bottom:14px;">
+        <div style="font-weight:600; color:var(--crit); margin-bottom:4px;">Autonomous Mutation Blocked</div>
+        <div style="font-size:13px; color:var(--text-secondary);" id="safetyModalReason">Command violates deterministic safety policy: prohibited command pattern detected.</div>
+      </div>
+      <div style="font-size:12px; color:var(--text-muted); margin-bottom:14px; line-height:1.5;">
+        <strong>Dual-Plane Invariant:</strong> LLMs (Ollama / Gemini) and AI agents (Devin) only diagnose and advise. Deterministic guardians enforce hard policy constraints at the execution boundary. Destructive operations like <code>rm -rf /</code>, pipe injection, or credential tampering are unconditionally rejected with 403 Forbidden.
+      </div>
+      <div class="flex justify-between items-center">
+        <span class="badge crit" id="safetyModalRisk">PROHIBITED</span>
+        <button class="btn sm" onclick="$('safetyModal').classList.remove('open')">Dismiss</button>
       </div>
     </div>
   </div>

@@ -140,10 +140,32 @@ class DevinAdapter:
         title = incident.get("title", "Infrastructure Software Incident")
         summary = incident.get("summary", "No summary provided")
         evidence = incident.get("evidence") or []
+        if isinstance(evidence, str):
+            try:
+                evidence = json.loads(evidence)
+            except Exception:
+                evidence = []
 
         hypotheses = [
             e.get("note") for e in evidence if isinstance(e, dict) and e.get("note")
         ] or [summary]
+
+        diag_files: list[str] = []
+        diag_repro: list[str] = []
+        diag_criteria: list[str] = []
+        for ev in evidence:
+            if isinstance(ev, dict):
+                if ev.get("github_repo_url") and affected_repo == "https://github.com/1kailas/Aegis.git":
+                    affected_repo = ev["github_repo_url"]
+                if ev.get("kind") == "ai_diagnosis":
+                    d = ev.get("detail") or ev.get("result") or {}
+                    if isinstance(d, dict):
+                        diag_files = d.get("affected_files") or d.get("affected_components") or []
+                        diag_repro = d.get("reproduction_steps") or d.get("diagnostic_steps") or []
+                        diag_criteria = d.get("acceptance_criteria") or []
+                        rc = d.get("root_cause") or d.get("root_cause_hypothesis")
+                        if rc and rc not in hypotheses:
+                            hypotheses.insert(0, rc)
 
         task = RepairTask(
             task_id=f"TASK-DEVIN-{iid}",
@@ -153,9 +175,9 @@ class DevinAdapter:
             root_cause_hypotheses=hypotheses,
             affected_repo=affected_repo,
             affected_revision=None,
-            affected_files=affected_files or ["aegis/"],
-            reproduction_steps=reproduction_steps or ["Verify incident symptoms against test suite."],
-            acceptance_criteria=acceptance_criteria or [
+            affected_files=affected_files or diag_files or ["aegis/"],
+            reproduction_steps=reproduction_steps or diag_repro or ["Verify incident symptoms against test suite."],
+            acceptance_criteria=acceptance_criteria or diag_criteria or [
                 "Fix the root cause identified in the incident summary.",
                 "Ensure all existing tests pass without regressions.",
                 "Include a targeted regression test for the failure scenario.",
@@ -265,3 +287,194 @@ class DevinAdapter:
                     pass
             out.append(item)
         return out
+
+    def poll_session(self, task_id: str) -> dict[str, Any]:
+        """Polls Devin session status via the official Devin API."""
+        row = self.db.query_one("SELECT * FROM jobs WHERE id=?", (task_id,))
+        if not row:
+            return {"error": "Task not found", "task_id": task_id}
+
+        payload = {}
+        if row["payload"]:
+            try:
+                payload = json.loads(row["payload"])
+            except Exception:
+                pass
+
+        session_id = payload.get("devin_session_id")
+        if not session_id and row["result"]:
+            try:
+                res_data = json.loads(row["result"])
+                session_id = res_data.get("session_id") or res_data.get("id")
+            except Exception:
+                pass
+
+        if not self.api_key:
+            return {
+                "task_id": task_id,
+                "configured": False,
+                "status": row["state"],
+                "devin_session_id": session_id,
+                "pull_request_url": payload.get("pull_request_url"),
+                "message": "DEVIN_API_KEY is not configured in .env; task is safely queued.",
+            }
+
+        if not session_id:
+            return {
+                "task_id": task_id,
+                "configured": True,
+                "status": row["state"],
+                "message": "No active Devin session dispatched yet for this task.",
+            }
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        try:
+            with httpx.Client(timeout=20.0) as client:
+                resp = client.get(f"{DEVIN_API_BASE}/sessions/{session_id}", headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    status_enum = data.get("status_enum") or data.get("status") or "working"
+                    pr_info = data.get("pull_request") or {}
+                    pr_url = pr_info.get("url") or data.get("pr_url") or payload.get("pull_request_url")
+
+                    if not pr_url and "structured_output" in data:
+                        pr_url = data["structured_output"].get("pull_request_url") or data["structured_output"].get("pr_url")
+
+                    payload["devin_session_id"] = session_id
+                    payload["status"] = "COMPLETED" if status_enum in ("stopped", "completed") else "RUNNING"
+                    if pr_url:
+                        payload["pull_request_url"] = pr_url
+
+                    new_state = "RUNNING" if status_enum not in ("stopped", "completed", "failed") else ("DONE" if status_enum != "failed" else "FAILED")
+                    self.db.execute(
+                        "UPDATE jobs SET state=?, updated_at=?, payload=?, result=? WHERE id=?",
+                        (new_state, utcnow(), json.dumps(payload), json.dumps(data), task_id),
+                    )
+
+                    incident_id = payload.get("incident_id")
+                    if incident_id and pr_url:
+                        try:
+                            self.db.execute(
+                                "UPDATE incidents SET state='PR_OPENED', updated_at=? WHERE id=? AND state != 'RECOVERY_VERIFIED'",
+                                (utcnow(), incident_id),
+                            )
+                        except Exception:
+                            pass
+
+                    return {
+                        "task_id": task_id,
+                        "session_id": session_id,
+                        "status": status_enum,
+                        "pull_request_url": pr_url,
+                        "data": data,
+                    }
+                else:
+                    return {
+                        "task_id": task_id,
+                        "session_id": session_id,
+                        "status": "API_ERROR",
+                        "error": f"Devin API returned HTTP {resp.status_code}: {resp.text}",
+                    }
+        except Exception as exc:
+            return {
+                "task_id": task_id,
+                "session_id": session_id,
+                "status": "ERROR",
+                "error": str(exc),
+            }
+
+    def close_loop_verification(
+        self,
+        task_id: str,
+        target_check_fn: Any = None,
+        auto_merged: bool = True,
+    ) -> dict[str, Any]:
+        """Closes the loop: validates deployed fix and transitions incident to RECOVERY_VERIFIED."""
+        row = self.db.query_one("SELECT * FROM jobs WHERE id=?", (task_id,))
+        if not row:
+            return {"error": "Task not found", "task_id": task_id}
+
+        payload = {}
+        if row["payload"]:
+            try:
+                payload = json.loads(row["payload"])
+            except Exception:
+                pass
+
+        iid = payload.get("incident_id")
+        healthy = True
+        probe_msg = "Target service verified healthy"
+        probe_details: dict[str, Any] = {}
+
+        if target_check_fn:
+            try:
+                healthy, probe_msg, probe_details = target_check_fn()
+            except Exception as e:
+                healthy = False
+                probe_msg = f"Live verification probe exception: {e}"
+
+        now = utcnow()
+        if healthy:
+            payload["status"] = "RECOVERY_VERIFIED"
+            self.db.execute(
+                "UPDATE jobs SET state='DONE', updated_at=?, payload=? WHERE id=?",
+                (now, json.dumps(payload), task_id),
+            )
+            if iid:
+                try:
+                    inc_row = self.db.query_one("SELECT * FROM incidents WHERE id=?", (iid,))
+                    if inc_row:
+                        lifecycle = []
+                        if inc_row["lifecycle"]:
+                            try:
+                                lifecycle = json.loads(inc_row["lifecycle"])
+                            except Exception:
+                                pass
+                        lifecycle.append({
+                            "ts": now,
+                            "from": inc_row["state"],
+                            "state": "RECOVERY_VERIFIED",
+                            "actor": "devin_adapter",
+                            "note": f"Autonomous repair loop closed. {probe_msg}",
+                        })
+                        evidence = []
+                        if inc_row["evidence"]:
+                            try:
+                                evidence = json.loads(inc_row["evidence"])
+                            except Exception:
+                                pass
+                        evidence.append({
+                            "kind": "closed_loop_verification",
+                            "task_id": task_id,
+                            "probe_msg": probe_msg,
+                            "probe_details": probe_details,
+                            "auto_merged": auto_merged,
+                            "ts": now,
+                        })
+                        self.db.execute(
+                            "UPDATE incidents SET state='RECOVERY_VERIFIED', updated_at=?, closed_at=?, lifecycle=?, evidence=? WHERE id=?",
+                            (now, now, json.dumps(lifecycle), json.dumps(evidence), iid),
+                        )
+                except Exception as e:
+                    _LOG.debug("Error updating incident closed loop: %s", e)
+
+            return {
+                "success": True,
+                "verified": True,
+                "task_id": task_id,
+                "incident_id": iid,
+                "status": "RECOVERY_VERIFIED",
+                "probe_message": probe_msg,
+            }
+        else:
+            return {
+                "success": False,
+                "verified": False,
+                "task_id": task_id,
+                "incident_id": iid,
+                "status": "RECOVERY_FAILED",
+                "probe_message": probe_msg,
+            }

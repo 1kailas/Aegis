@@ -99,6 +99,15 @@ def main() -> int:
         return 2
     ctx.log.info("Aegis %s starting (host=%s mode=%s)", __version__,
                  ctx.config.server.host, ctx.flags.mode)
+    has_gemini = bool(ctx.config.gemini_api_key and len(ctx.config.gemini_api_key.strip()) > 8)
+    has_devin = bool(ctx.devin.api_key or ctx.devin._desktop_cli)
+    ctx.log.info(
+        "AI Diagnostic & Repair Startup: Gemini configured=%s (model=%s, budget=%s/hr), Devin configured=%s",
+        has_gemini,
+        ctx.config.models.gemini_model,
+        ctx.config.models.gemini_max_requests_per_hour,
+        has_devin,
+    )
     run(ctx, args.host, args.port)
     return 0
 

@@ -119,7 +119,14 @@ class SelfHealingEngine:
 
                     # 2. Automated Remediation for Allowlisted Operations
                     if ctx.flags.mode == "policy_autonomous" and not ctx.flags.emergency_stop:
-                        for act_proposal in diag.recommended_actions:
+                        actions_to_try = list(diag.recommended_actions)
+                        cat_lower = inc.get("category", "").lower()
+                        if "thermal" in cat_lower:
+                            actions_to_try.append({"action": "set_backpressure", "target": "inference_queue", "reason": "Deterministic thermal safety backpressure"})
+                        elif "oom" in cat_lower or "resource" in cat_lower:
+                            actions_to_try.append({"action": "trim_cache", "target": "host_resources", "reason": "Deterministic resource memory trim"})
+
+                        for act_proposal in actions_to_try:
                             action_name = act_proposal.get("action", "")
                             target = act_proposal.get("target", "system")
                             reason = act_proposal.get("reason", diag.root_cause_hypothesis)

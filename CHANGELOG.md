@@ -4,6 +4,46 @@ All notable changes to the **Aegis AI** platform are documented in this file in 
 
 ---
 
+## 2026-10-25T03:30:00+05:30 — Aegis AI v3.2.0: Devin Hacks Hackathon — Autonomous On-Call SRE & End-to-End Repair Verification
+
+- **Changed:**
+  - **Gemini Tier 2 Structured AI Diagnosis**:
+    - Integrated Google Gemini REST API (`gemini-2.5-flash` / `gemini-3.5-flash`) via `GEMINI_API_KEY` from `.env`.
+    - Made request budget configurable via `GEMINI_MAX_REQ_PER_HOUR` (default 30 for hackathon demo).
+    - Configured structured JSON output schema `{root_cause, confidence, affected_files, reproduction_steps, acceptance_criteria}` with Pydantic validation and markdown code-block scrubbing.
+    - Implemented multi-tier diagnosis fallback chain: Local Ollama -> Cloud Gemini API -> Deterministic Expert Rules.
+    - Extended sensitive secret scrubbing to scrub `GEMINI_API_KEY`, `DEVIN_API_KEY`, Bearer tokens, and GitHub tokens from prompts, logs, and API payloads.
+    - Added `/api/health` indicators `gemini_configured: bool` and `devin_configured: bool` with startup logging (never exposing raw keys).
+  - **"Connect a Website" Flow**:
+    - Added `monitored_targets` SQLite schema migration (`migrations/005_monitored_targets.sql`).
+    - Implemented `WebsiteMonitor` in `aegis/orchestration/website_monitor.py` for continuous HTTP probing of any plain website or microservice (status, latency, content check).
+    - Automatically opens a Critical Incident on consecutive failures or 5xx breaches and verifies recovery when service returns to 200 OK.
+    - Exposed REST endpoints `GET /api/targets`, `POST /api/targets`, `DELETE /api/targets/{id}`, and `POST /api/targets/{id}/probe`.
+    - Added web UI card and modal in the dashboard to connect and monitor production websites with live status badges.
+  - **Real End-to-End Devin Repair Loop & Closing-the-Loop Verification**:
+    - Upgraded `DevinAdapter` in `aegis/engineering/devin_adapter.py`: creates bounded `RepairTask` briefs enriched with diagnosis evidence, repro steps, acceptance criteria, and security restrictions.
+    - Added `poll_session(task_id)` calling the official Devin API `GET /v1/sessions/{id}` to capture real PR links.
+    - Added `close_loop_verification(task_id)` and endpoint `POST /api/devin/tasks/{id}/close-loop` that applies the patch/fix, executes independent verification probes, and transitions incidents to `RECOVERY_VERIFIED`.
+    - Maintained honest non-configured status (`AWAITING_EXTERNAL_SETUP`) when `DEVIN_API_KEY` is not provided (never fabricating fake results).
+  - **Demo Target Microservice**:
+    - Created lightweight Flask target application in `demo-target/` (`app.py`, `Dockerfile`, `requirements.txt`, `trigger_bug.sh`, `fix_bug.sh`).
+    - Features triggerable defect endpoint (`POST /break` -> HTTP 500 NullPointer in `checkout.py`) and fix endpoint (`POST /fix` -> HTTP 200 OK).
+  - **Deterministic Safety Demonstration**:
+    - Added `POST /api/policy/test-safety` endpoint submitting dangerous actions (`rm -rf /`) through `RemediationPolicyEngine`.
+    - Deterministically rejects dangerous shell mutations with HTTP 403 Forbidden and structured policy violation reason.
+    - Added "Safety Test (403)" button and modal in the web dashboard.
+  - **Hardware / Resource Action Demo**:
+    - Added `POST /api/demo/simulate-resource-action` safely triggering visible remediation (model VRAM eviction / cache trimming) by `ResourceGuardian`.
+    - Logs action on incident timeline and audit trail.
+  - **Autonomous Incident Timeline View**:
+    - Created visual 6-stage lifecycle timeline in incident inspection: `1. DETECTED` -> `2. DIAGNOSED` (tier badge) -> `3. DELEGATED TO DEVIN` -> `4. PR OPENED` -> `5. TESTS PASSED` -> `6. RECOVERY VERIFIED`.
+    - Added headline **MTTR Metric** (Time to Verified Recovery).
+  - **Demo Reliability & Judge Script**:
+    - Created `Makefile` and `scripts/demo.sh` for 1-command startup (`make demo`).
+    - Updated `README.md` with 90-second judge demo script, closing-the-loop architectural explanation, and honest known limitations.
+- **Validation:** 80 out of 80 tests passing (`.venv/bin/pytest tests/ -v`). All existing 70 tests pass without regression. Zero hardcoded secrets in code or git.
+
+
 ## 2026-10-25T01:55:00+05:30 — Aegis AI v3.2.0: Production SRE Console, Resilient API Routing & Judge Demonstration Release
 
 - **Changed:**

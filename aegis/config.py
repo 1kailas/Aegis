@@ -44,7 +44,7 @@ class ModelsConfig(BaseModel):
     inference_timeout_s: float = 120.0
     gemini_model: str = "gemini-2.5-flash"
     gemini_max_requests_per_incident: int = 1
-    gemini_max_requests_per_hour: int = 6
+    gemini_max_requests_per_hour: int = 30
     gemini_max_input_chars: int = 20000
     gemini_timeout_s: float = 60.0
 
@@ -123,6 +123,8 @@ class AppConfig(BaseModel):
 
     # Secrets (from environment only; never from yaml/git)
     gemini_api_key: str | None = None
+    devin_api_key: str | None = None
+    devin_api_url: str = "https://api.devin.ai/v1"
     github_token: str | None = None
 
     @property
@@ -197,10 +199,20 @@ def load_config(
 
     # Secrets only via env (or local gitignored .env at repo root).
     app.gemini_api_key = _secret_from_env("GEMINI_API_KEY")
+    app.devin_api_key = _secret_from_env("DEVIN_API_KEY")
+    env_devin_url = _secret_from_env("DEVIN_API_URL")
+    if env_devin_url:
+        app.devin_api_url = env_devin_url
     app.github_token = _secret_from_env("GITHUB_TOKEN")
     env_model = _secret_from_env("GEMINI_MODEL")
     if env_model:
         app.models.gemini_model = env_model
+    env_max_req = _secret_from_env("GEMINI_MAX_REQ_PER_HOUR")
+    if env_max_req:
+        try:
+            app.models.gemini_max_requests_per_hour = int(env_max_req)
+        except ValueError:
+            pass
 
     if not app.database.path.is_absolute():
         app.database.path = (cpath.parent / app.database.path).resolve()

@@ -2,9 +2,9 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Version: 3.2.0](https://img.shields.io/badge/version-3.2.0-blue.svg)]()
-[![Tests Passing](https://img.shields.io/badge/tests-70%2F70%20passed-brightgreen.svg)]()
-[![Judge Demo: Ready](https://img.shields.io/badge/judge%20demo-ready-brightgreen.svg)]()
-[![Prometheus Ready](https://img.shields.io/badge/prometheus-%2Fmetrics-orange.svg)]()
+[![Tests Passing](https://img.shields.io/badge/tests-80%2F80%20passed-brightgreen.svg)]()
+[![Devin Hacks: Ready](https://img.shields.io/badge/Devin%20Hacks-Hackathon%20Ready-purple.svg)]()
+[![Gemini Tier 2: Enabled](https://img.shields.io/badge/Gemini%202.5%20Flash-Active-blue.svg)]()
 [![Security: Hardened](https://img.shields.io/badge/security-hardened-blue.svg)](SECURITY.md)
 [![Agents: Devin Protocol](https://img.shields.io/badge/agents-Devin%20protocol-purple.svg)](AGENTS.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -12,13 +12,56 @@
 
 > **"Aegis monitors and orchestrates. Deterministic controllers enforce safety. AI investigates and engineers fixes. Independent verification determines whether the fix actually worked."**
 
-Aegis AI is a production-minded autonomous infrastructure monitoring and engineering control plane. It continuously observes whole-system computing environments, orchestrates workloads across Docker and Kubernetes, monitors hardware health and AI model-serving infrastructure, detects and diagnoses failures, and delegates complex software and configuration repairs to **Devin** as its designated repair engineer. It validates fixes in isolated sandboxes and submits evidence-backed GitHub pull requests—backed by automated recovery verification, resource optimization, predictive protection, and safety-first operations.
+Aegis AI is an autonomous on-call engineering control plane designed for production websites, microservices, and AI inference runtimes. Prepared for the **Devin Hacks Kochi Hackathon** (tracks: *Kill the Busywork* / *Make the Invisible Visible*), Aegis continuously probes live services, correlates anomalies, performs multi-tier AI diagnosis (Local Ollama → Google Gemini 2.5 Flash → Deterministic Expert Rules), delegates code repairs to **Devin**, and independently verifies live service recovery to close the loop.
 
 ---
 
-## Table of Contents
+## ⚡ 90-Second Judge Demonstration Script
 
-- [🏆 Judge Demonstration Script (3-Minute Live Walkthrough)](#-judge-demonstration-script-3-minute-live-walkthrough)
+To run the complete demonstration locally with zero manual setup:
+
+```bash
+make demo
+# or: bash scripts/demo.sh
+```
+
+This launches the Aegis Control Plane (`http://localhost:8000`), the demo target service (`http://localhost:5050`), registers the target, and prints live status.
+
+### The 90-Second Live Walkthrough
+
+| Elapsed | Action | What Judges See |
+| :--- | :--- | :--- |
+| **00:00 – 00:15** | **Connect a Production Target** | In Overview, see **"Checkout Payment Service"** monitored at `http://127.0.0.1:5050/health`. Live status is **HTTP 200 OK**, latency ~12ms. Show that Aegis works on any standard website or web API, not just local Docker containers. |
+| **00:15 – 00:30** | **Simulate Production Outage** | Click **"Simulate 500 Outage"** (or run `bash demo-target/trigger_bug.sh`). The target health endpoint immediately breaks with HTTP 500 (`NullPointer in checkout.py`). Within 4 seconds, Aegis detects 2 consecutive failures and automatically creates a Critical Incident. |
+| **00:30 – 00:50** | **Multi-Tier Gemini Diagnosis** | Aegis executes Tier 2 diagnosis via **Google Gemini** (model `gemini-2.5-flash` / `gemini-3.5-flash`), returning structured JSON with `{root_cause, confidence: 92%, affected_files: ["checkout.py"], reproduction_steps, acceptance_criteria}`. The incident timeline badges the diagnosis tier used. |
+| **00:50 – 01:10** | **Devin Repair Delegation & PR** | Aegis creates a bounded `RepairTask` for Devin containing reproduction steps, acceptance criteria, and security guardrails (no credentials access, no arbitrary host shell execution). If authenticated, Devin opens a real PR link; if unauthenticated, Aegis honestly reports `AWAITING_DEVIN_API_KEY` without fabricating results. |
+| **01:10 – 01:25** | **Closing the Loop (Verified Recovery)** | Click **"Verify & Close Loop"**. Aegis applies the repair to the target service and runs an independent HTTP health probe. Once the live probe returns **HTTP 200 OK**, the incident transitions to **`RECOVERY_VERIFIED`** and displays the headline **MTTR Metric** (e.g., `Time to Verified Recovery: 38.4s`). |
+| **01:25 – 01:30** | **Deterministic Safety Demonstration** | Click **"Safety Test (403)"**. Aegis submits `rm -rf /` through the `ActionPolicyEngine`. The dual-plane guardian immediately blocks execution with a deterministic **HTTP 403 Forbidden**, proving that AI models only advise while deterministic code enforces safety invariants. |
+
+---
+
+## 🔁 Closing the Loop: Why A PR Isn't Enough
+
+A common failure mode in AI engineering demos is declaring victory the moment a Pull Request is opened. In real production SRE:
+> **A Pull Request does not fix a down website until it is merged, deployed, and independently verified.**
+
+Aegis solves this closing-the-loop gap:
+1. **Isolated Workspace Validation**: Executes targeted test suites in an isolated sandbox (`IsolatedWorkspaceManager`) to ensure zero regressions before touching production.
+2. **Demo Auto-Deploy Mode**: In hackathon demo mode, Aegis triggers immediate hot-patching / redeployment on the target application.
+3. **Independent Verification Probe**: The AI does not decide whether the incident is resolved. An independent HTTP health probe tests the live application endpoint. Only when HTTP 200 OK is re-established does the incident transition to `RECOVERY_VERIFIED`.
+
+---
+
+## 🔍 Known Limitations & Honest Scope
+
+We believe in radical technical honesty with hackathon judges:
+
+1. **Server-Side & Status Code Outages vs. Visual UI Glitches**: Aegis monitors HTTP status codes, latency thresholds, response content assertions, and container/process lifecycles. It does not perform visual pixel regression or computer-vision diffing on frontend CSS bugs unless mapped to a health assertion.
+2. **Deterministic Guardian Boundaries**: LLM advice (Ollama, Gemini) is treated strictly as an untrusted recommendation. If an AI suggests a destructive command (`rm -rf`, raw shell piping, dropping tables), the dual-plane `RemediationPolicyEngine` unconditionally rejects it with HTTP 403.
+3. **Devin API Dependency**: When `DEVIN_API_KEY` is not provided, Aegis safely queues repair tasks in SQLite rather than faking PR URLs or simulating fake success.
+4. **Hourly Rate Limits**: Gemini API calls are strictly bounded by `GEMINI_MAX_REQ_PER_HOUR=30` (configurable) to prevent runaway costs during production incidents. When exhausted, Aegis gracefully falls back to deterministic expert rules.
+
+---
 - [Architectural Principles & Safety Guardrails](#architectural-principles--safety-guardrails)
 - [Architecture & Phase Breakdown](#architecture--phase-breakdown)
   - [Phase 1: Core Platform & Host Telemetry](#phase-1-core-platform--host-telemetry)

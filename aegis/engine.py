@@ -221,6 +221,8 @@ class MonitoringEngine(threading.Thread):
         if self._tick_count % 2 == 0 or self._tick_count == 1:
             try:
                 ctx.prober.probe_all()
+                if hasattr(ctx, "targets"):
+                    ctx.targets.probe_all()
                 ctx.self_healing.run_reconciliation_cycle()
             except Exception as e:
                 _LOG.debug("Self-healing or synthetic probe tick note: %s", e)

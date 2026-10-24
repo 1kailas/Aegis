@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import time
 from dataclasses import dataclass, field
@@ -36,13 +37,42 @@ class ActionProposal(BaseModel):
 
 
 class DiagnosisSchema(BaseModel):
-    root_cause_hypothesis: str
-    confidence_score: float = Field(ge=0.0, le=1.0)
-    is_code_or_config_issue: bool
+    root_cause: str = ""
+    root_cause_hypothesis: str = ""
+    confidence: float = 0.85
+    confidence_score: float = 0.85
+    is_code_or_config_issue: bool = True
+    affected_files: list[str] = Field(default_factory=list)
     affected_components: list[str] = Field(default_factory=list)
+    reproduction_steps: list[str] = Field(default_factory=list)
+    acceptance_criteria: list[str] = Field(default_factory=list)
     recommended_actions: list[ActionProposal] = Field(default_factory=list)
     diagnostic_steps: list[str] = Field(default_factory=list)
     reproduction_notes: str = ""
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.root_cause and not self.root_cause_hypothesis:
+            self.root_cause_hypothesis = self.root_cause
+        elif self.root_cause_hypothesis and not self.root_cause:
+            self.root_cause = self.root_cause_hypothesis
+
+        if self.confidence != 0.85 and self.confidence_score == 0.85:
+            self.confidence_score = self.confidence
+        elif self.confidence_score != 0.85 and self.confidence == 0.85:
+            self.confidence = self.confidence_score
+
+        if self.affected_files and not self.affected_components:
+            self.affected_components = list(self.affected_files)
+        elif self.affected_components and not self.affected_files:
+            self.affected_files = list(self.affected_components)
+
+        if self.reproduction_steps and not self.diagnostic_steps:
+            self.diagnostic_steps = list(self.reproduction_steps)
+        elif self.diagnostic_steps and not self.reproduction_steps:
+            self.reproduction_steps = list(self.diagnostic_steps)
+
+        if self.reproduction_steps and not self.reproduction_notes:
+            self.reproduction_notes = "; ".join(self.reproduction_steps)
 
 
 @dataclass
@@ -55,11 +85,22 @@ class DiagnosisResult:
     confidence_score: float = 0.5
     is_code_or_config_issue: bool = False
     affected_components: list[str] = field(default_factory=list)
+    affected_files: list[str] = field(default_factory=list)
+    reproduction_steps: list[str] = field(default_factory=list)
+    acceptance_criteria: list[str] = field(default_factory=list)
     recommended_actions: list[dict[str, Any]] = field(default_factory=list)
     diagnostic_steps: list[str] = field(default_factory=list)
     reproduction_notes: str = ""
     tokens_used: int = 0
     created_at: str = field(default_factory=utcnow)
+
+    @property
+    def root_cause(self) -> str:
+        return self.root_cause_hypothesis
+
+    @property
+    def confidence(self) -> float:
+        return self.confidence_score
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -67,12 +108,17 @@ class DiagnosisResult:
             "provider": self.provider,
             "model_name": self.model_name,
             "status": self.status,
+            "root_cause": self.root_cause_hypothesis,
             "root_cause_hypothesis": self.root_cause_hypothesis,
+            "confidence": self.confidence_score,
             "confidence_score": self.confidence_score,
             "is_code_or_config_issue": self.is_code_or_config_issue,
-            "affected_components": self.affected_components,
+            "affected_files": self.affected_files or self.affected_components,
+            "affected_components": self.affected_components or self.affected_files,
+            "reproduction_steps": self.reproduction_steps or self.diagnostic_steps,
+            "acceptance_criteria": self.acceptance_criteria,
             "recommended_actions": self.recommended_actions,
-            "diagnostic_steps": self.diagnostic_steps,
+            "diagnostic_steps": self.diagnostic_steps or self.reproduction_steps,
             "reproduction_notes": self.reproduction_notes,
             "tokens_used": self.tokens_used,
             "created_at": self.created_at,
@@ -87,8 +133,8 @@ class IncidentDiagnoser:
         ollama_url: str = "http://127.0.0.1:11434",
         local_model: str = "qwen2.5:1.5b",
         gemini_api_key: str | None = None,
-        gemini_model: str = "gemini-flash-latest",
-        max_gemini_requests_per_hour: int = 6,
+        gemini_model: str = "gemini-2.5-flash",
+        max_gemini_requests_per_hour: int = 30,
     ):
         self.ollama_url = ollama_url.rstrip("/")
         self.local_model = local_model
@@ -159,6 +205,13 @@ class IncidentDiagnoser:
         # Redact tokens and keys
         joined = re.sub(r"(AIzaSy[A-Za-z0-9_-]{33})", "[REDACTED_GEMINI_KEY]", joined)
         joined = re.sub(r"(gh[pousr]_[A-Za-z0-9_]{30,})", "[REDACTED_GITHUB_TOKEN]", joined)
+        joined = re.sub(r"(devin_[A-Za-z0-9_-]{16,}|cog_[A-Za-z0-9_-]{16,})", "[REDACTED_DEVIN_KEY]", joined)
+        joined = re.sub(r"(Bearer\s+[A-Za-z0-9_\-\.]{20,})", "Bearer [REDACTED_TOKEN]", joined)
+        if self.gemini_api_key and len(self.gemini_api_key) > 6:
+            joined = joined.replace(self.gemini_api_key, "[REDACTED_GEMINI_KEY]")
+        devin_env_k = os.environ.get("DEVIN_API_KEY")
+        if devin_env_k and len(devin_env_k) > 6:
+            joined = joined.replace(devin_env_k, "[REDACTED_DEVIN_KEY]")
         return joined
 
     def _diagnose_local(self, iid: str, context: str) -> DiagnosisResult | None:
@@ -202,17 +255,17 @@ class IncidentDiagnoser:
         return None
 
     def _diagnose_gemini(self, iid: str, context: str) -> DiagnosisResult | None:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.gemini_model}:generateContent?key={self.gemini_api_key}"
         instruction = (
-            "Analyze this infrastructure incident and output ONLY valid JSON matching this schema:\n"
+            "You are Aegis autonomous on-call engineering diagnoser. Analyze the incident facts.\n"
+            "Respond strictly in JSON matching this exact schema:\n"
             "{\n"
-            '  "root_cause_hypothesis": "string",\n'
-            '  "confidence_score": 0.85,\n'
+            '  "root_cause": "Specific technical root cause explanation",\n'
+            '  "confidence": 0.90,\n'
+            '  "affected_files": ["path/to/file.py"],\n'
+            '  "reproduction_steps": ["step 1 to reproduce", "step 2"],\n'
+            '  "acceptance_criteria": ["criteria 1 to verify fix", "criteria 2"],\n'
             '  "is_code_or_config_issue": true,\n'
-            '  "affected_components": ["component"],\n'
-            '  "recommended_actions": [{"action": "restart", "target": "target", "risk_level": "LOW", "reason": "why", "rollback_plan": "none", "requires_approval": false}],\n'
-            '  "diagnostic_steps": ["inspect logs"],\n'
-            '  "reproduction_notes": "notes"\n'
+            '  "recommended_actions": [{"action": "restart_container", "target": "service", "risk_level": "LOW", "reason": "why", "rollback_plan": "none", "requires_approval": false}]\n'
             "}\n"
         )
         payload = {
@@ -221,29 +274,47 @@ class IncidentDiagnoser:
             ]
         }
         self._record_gemini_call()
-        with httpx.Client(timeout=8.0) as client:
-            res = client.post(url, json=payload)
-            if res.status_code == 200:
-                cands = res.json().get("candidates", [])
-                if cands:
-                    text = cands[0]["content"]["parts"][0]["text"].strip()
-                    # Clean markdown codeblocks if wrapped in ```json
-                    if text.startswith("```"):
-                        text = re.sub(r"^```[a-z]*\n?", "", text)
-                        text = re.sub(r"\n?```$", "", text)
-                    validated = DiagnosisSchema.model_validate_json(text)
-                    return DiagnosisResult(
-                        incident_id=iid,
-                        provider="cloud_gemini",
-                        model_name=self.gemini_model,
-                        root_cause_hypothesis=validated.root_cause_hypothesis,
-                        confidence_score=validated.confidence_score,
-                        is_code_or_config_issue=validated.is_code_or_config_issue,
-                        affected_components=validated.affected_components,
-                        recommended_actions=[a.model_dump() for a in validated.recommended_actions],
-                        diagnostic_steps=validated.diagnostic_steps,
-                        reproduction_notes=validated.reproduction_notes,
-                    )
+        models_to_try = [self.gemini_model]
+        if self.gemini_model != "gemini-3.5-flash":
+            models_to_try.append("gemini-3.5-flash")
+
+        for model in models_to_try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.gemini_api_key}"
+            try:
+                with httpx.Client(timeout=15.0) as client:
+                    res = client.post(url, json=payload)
+                    if res.status_code == 200:
+                        cands = res.json().get("candidates", [])
+                        if cands:
+                            text = cands[0]["content"]["parts"][0]["text"].strip()
+                            # Clean markdown codeblocks if wrapped in ```json
+                            if text.startswith("```"):
+                                text = re.sub(r"^```[a-z]*\n?", "", text)
+                                text = re.sub(r"\n?```$", "", text)
+                            validated = DiagnosisSchema.model_validate_json(text)
+                            return DiagnosisResult(
+                                incident_id=iid,
+                                provider="cloud_gemini",
+                                model_name=model,
+                                root_cause_hypothesis=validated.root_cause_hypothesis or validated.root_cause,
+                                confidence_score=validated.confidence_score or validated.confidence,
+                                is_code_or_config_issue=validated.is_code_or_config_issue,
+                                affected_components=validated.affected_components or validated.affected_files,
+                                affected_files=validated.affected_files or validated.affected_components,
+                                reproduction_steps=validated.reproduction_steps or validated.diagnostic_steps,
+                                acceptance_criteria=validated.acceptance_criteria,
+                                recommended_actions=[a.model_dump() for a in validated.recommended_actions],
+                                diagnostic_steps=validated.diagnostic_steps or validated.reproduction_steps,
+                                reproduction_notes=validated.reproduction_notes,
+                            )
+                    elif res.status_code == 404:
+                        _LOG.info("Gemini model %s returned 404; trying fallback candidate", model)
+                        continue
+                    else:
+                        _LOG.warning("Gemini API error (%s): %s", res.status_code, res.text[:200])
+            except Exception as exc:
+                _LOG.warning("Gemini connection error for %s: %s", model, exc)
+                continue
         return None
 
     def _diagnose_expert_rules(

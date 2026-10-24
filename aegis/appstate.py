@@ -45,6 +45,7 @@ from aegis.orchestration.deployer import OneClickDeployer
 from aegis.orchestration.docker_adapter import DockerAdapter
 from aegis.orchestration.k8s_adapter import KubernetesAdapter
 from aegis.orchestration.probers import SyntheticProber
+from aegis.orchestration.website_monitor import WebsiteMonitor
 from aegis.security.rbac import RBACManager
 from aegis.db import Database, utcnow
 from aegis.events import EventBus
@@ -147,8 +148,9 @@ class AppContext:
             local_model=config.models.investigator,
             gemini_api_key=config.gemini_api_key,
             gemini_model=config.models.gemini_model,
+            max_gemini_requests_per_hour=config.models.gemini_max_requests_per_hour,
         )
-        self.devin = DevinAdapter(self.db)
+        self.devin = DevinAdapter(self.db, api_key=config.devin_api_key)
         self.remediation = RemediationPolicyEngine(self.db, self.events)
         repo_root = Path(__file__).resolve().parent.parent
         self.workspace_mgr = IsolatedWorkspaceManager(base_repo_dir=repo_root)
@@ -187,6 +189,7 @@ class AppContext:
         self.forecaster = TelemetryForecaster()
         self.self_healing = SelfHealingEngine(self)
         self.prober = SyntheticProber()
+        self.targets = WebsiteMonitor(self.db, self.incidents, self.events)
         self.cluster = ClusterMeshManager(self.db, self.events)
         self.canary = CanaryVerificationEngine(self.db, self.events)
         self.dispatcher = NotificationDispatcher(self.db, self.events)

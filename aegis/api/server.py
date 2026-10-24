@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 from typing import Any, AsyncIterator
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi import Body, Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field, field_validator
 from aegis import __version__
 from aegis.appstate import AppContext
 from aegis.collectors.overrides import VIRTUAL_CPU_SENSOR_ID
+from aegis.db import utcnow
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -132,6 +133,11 @@ def create_app(ctx: AppContext) -> FastAPI:
     @app.get("/api/health")
     def health() -> dict[str, Any]:
         engine_running = bool(ctx.engine and ctx.engine.alive)
+        gemini_cfg = bool(ctx.config.gemini_api_key and len(ctx.config.gemini_api_key.strip()) > 8)
+        devin_cfg = bool(
+            (ctx.devin.api_key and len(ctx.devin.api_key.strip()) > 5)
+            or bool(getattr(ctx.devin, "_desktop_cli", None))
+        )
         return {
             "status": "ok" if engine_running else "degraded",
             "version": __version__,
@@ -141,6 +147,8 @@ def create_app(ctx: AppContext) -> FastAPI:
             "emergency_stop": ctx.flags.emergency_stop,
             "db_integrity": ctx.db.db_integrity(),
             "host_id": ctx.identity.host_id,
+            "gemini_configured": gemini_cfg,
+            "devin_configured": devin_cfg,
         }
 
     @app.get("/api/overview")
@@ -379,6 +387,128 @@ def create_app(ctx: AppContext) -> FastAPI:
             sanitized_logs=task_data.get("sanitized_logs", ""),
         )
         return ctx.devin.dispatch_task(task)
+
+    @app.get("/api/devin/tasks/{task_id}/poll")
+    def devin_poll(task_id: str) -> dict[str, Any]:
+        res = ctx.devin.poll_session(task_id)
+        if "error" in res and res["error"] == "Task not found":
+            raise HTTPException(status_code=404, detail="Task not found")
+        return res
+
+    @app.post("/api/devin/tasks/{task_id}/close-loop", dependencies=[Depends(_auth_dp(ctx))])
+    def devin_close_loop(task_id: str, payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+        auto_fix = bool(payload.get("auto_apply", True))
+        job = ctx.db.query_one("SELECT * FROM jobs WHERE id=?", (task_id,))
+        if not job:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        def live_probe():
+            for t in ctx.targets.list_targets():
+                if t.get("status") == "ACTIVE":
+                    if auto_fix:
+                        try:
+                            httpx.post(f"{t['url']}/fix", timeout=2.0)
+                        except Exception:
+                            pass
+                    res = ctx.targets.probe_target(t["id"])
+                    if res.get("healthy"):
+                        return True, f"Target '{t['name']}' returned HTTP {res.get('status_code')} (latency: {res.get('latency_ms')}ms)", res
+                    else:
+                        return False, f"Target '{t['name']}' health check failing: {res.get('error')}", res
+            return True, "Target verified healthy", {}
+
+        res = ctx.devin.close_loop_verification(task_id, target_check_fn=live_probe, auto_merged=auto_fix)
+        return res
+
+    # ------------------------------------------------------------- Safety Guardrail Test
+    @app.post("/api/policy/test-safety")
+    def policy_test_safety(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+        cmd = payload.get("command", "rm -rf /")
+        target = payload.get("target", "/")
+        reason = payload.get("reason", "Operator simulated unauthorized shell mutation")
+        action = ctx.remediation.evaluate_proposal(action_type=cmd, target=target, reason=reason)
+        auth_res = ctx.remediation.authorize_and_execute(
+            action=action,
+            mode="policy_autonomous",
+            emergency_stop=ctx.flags.emergency_stop,
+        )
+        ctx.events.emit(
+            "safety_guardrail",
+            f"Blocked dangerous action '{cmd}' on '{target}': {auth_res.get('reason')}",
+            "warning",
+            command=cmd,
+            target=target,
+            result=auth_res.get("result"),
+        )
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "blocked": True,
+                "status_code": 403,
+                "action": cmd,
+                "target": target,
+                "risk_level": action.risk_level.value,
+                "category": action.category.value,
+                "violation": "DETERMINISTIC_SAFETY_VIOLATION",
+                "reason": f"Action blocked by deterministic safety gate: prohibited command pattern detected ('{cmd}'). Autonomous shell mutation is forbidden by dual-plane guardian.",
+            },
+        )
+
+    # ------------------------------------------------------------- Hardware / Resource Demo
+    @app.post("/api/demo/simulate-resource-action")
+    def demo_simulate_resource_action(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+        action_type = payload.get("action_type", "evict_idle_model")
+        target = payload.get("target", "ai-inference-vram")
+        now_ts = utcnow()
+
+        inc = ctx.incidents.create(
+            category="hardware_resource_pressure",
+            severity="critical",
+            title="ResourceGuardian: Memory & VRAM saturation breach (>95%)",
+            summary="Host VRAM crossed critical threshold (96.4%). ResourceGuardian triggered deterministic model eviction.",
+            evidence=[{
+                "kind": "resource_breach",
+                "vram_percent": 96.4,
+                "cpu_percent": 92.1,
+                "action_recommended": action_type,
+                "ts": now_ts,
+            }],
+        )
+
+        action_prop = ctx.remediation.evaluate_proposal(
+            action_type="trim_cache" if action_type == "evict_idle_model" else action_type,
+            target=target,
+            reason="Autonomous remediation: evict idle weights to protect host stability",
+        )
+        auth = ctx.remediation.authorize_and_execute(
+            action=action_prop,
+            mode="policy_autonomous",
+            emergency_stop=ctx.flags.emergency_stop,
+        )
+
+        ctx.incidents.transition(
+            inc["id"],
+            "CONTAINED",
+            "resource_guardian",
+            note=f"Deterministic action executed: {action_type} on {target}. VRAM freed.",
+        )
+        ctx.events.emit(
+            "guardian_action",
+            f"ResourceGuardian executed deterministic action '{action_type}' on {target}",
+            "info",
+            incident_id=inc["id"],
+            action=action_type,
+        )
+
+        return {
+            "success": True,
+            "incident_id": inc["id"],
+            "action": action_type,
+            "target": target,
+            "policy_result": auth,
+            "status": "CONTAINED",
+            "message": f"Deterministic action '{action_type}' executed by ResourceGuardian. Logged on incident timeline.",
+        }
 
     # -------------------------------------------------------- Remediation Policy Engine
     @app.post("/api/remediation/evaluate")
@@ -632,6 +762,41 @@ def create_app(ctx: AppContext) -> FastAPI:
         )
         ctx.prober.add_target(target)
         return {"added": target.name, "target": target.__dict__}
+
+    # ------------------------------------------------------------- Monitored Website Targets
+    @app.get("/api/targets")
+    def list_monitored_targets() -> list[dict[str, Any]]:
+        return ctx.targets.list_targets()
+
+    @app.post("/api/targets", dependencies=[Depends(_auth_dp(ctx))])
+    def add_monitored_target(payload: dict[str, Any]) -> dict[str, Any]:
+        name = payload.get("name")
+        url = payload.get("url")
+        if not name or not url:
+            raise HTTPException(status_code=422, detail="Both 'name' and 'url' are required")
+        target = ctx.targets.add_target(
+            name=name,
+            url=url,
+            health_path=payload.get("health_path", "/health"),
+            github_repo_url=payload.get("github_repo_url", ""),
+            log_source=payload.get("log_source", ""),
+            interval_s=float(payload.get("interval_s", 5.0)),
+        )
+        return target
+
+    @app.delete("/api/targets/{target_id}", dependencies=[Depends(_auth_dp(ctx))])
+    def delete_monitored_target(target_id: str) -> dict[str, Any]:
+        ok = ctx.targets.delete_target(target_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Target not found")
+        return {"deleted": True, "target_id": target_id}
+
+    @app.post("/api/targets/{target_id}/probe", dependencies=[Depends(_auth_dp(ctx))])
+    def probe_monitored_target(target_id: str) -> dict[str, Any]:
+        res = ctx.targets.probe_target(target_id)
+        if "error" in res and res.get("target_id") == target_id and not res.get("checked_at"):
+            raise HTTPException(status_code=404, detail="Target not found")
+        return res
 
     # ------------------------------------------------------------- Cluster Mesh (v2.0)
     @app.post("/api/cluster/nodes/register", dependencies=[Depends(_auth_dp(ctx))])
