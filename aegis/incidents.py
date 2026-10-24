@@ -51,7 +51,7 @@ ALLOWED_TRANSITIONS: dict[str, set[str]] = {
         "RECOVERY_VERIFIED", "CLOSED_WITHOUT_REPAIR",
     },
     "CONTAINMENT_REQUIRED": {"CONTAINED", "RECOVERY_FAILED"},
-    "CONTAINED": {"REPAIRING", "VALIDATING", "PR_OPENED", "RECOVERY_VERIFIED", "RECOVERY_FAILED",
+    "CONTAINED": {"REPAIRING", "VALIDATING", "PR_OPENED", "NEEDS_HUMAN_APPROVAL", "RECOVERY_VERIFIED", "RECOVERY_FAILED",
                   "CLOSED_WITHOUT_REPAIR"},
     "REPAIRING": {"VALIDATING", "PR_READY", "PR_OPENED", "REPAIR_REJECTED", "RECOVERY_FAILED"},
     "VALIDATING": {"PR_READY", "PR_OPENED", "REPAIR_REJECTED", "RECOVERY_FAILED"},
@@ -149,6 +149,13 @@ class IncidentStore:
             "SELECT * FROM incidents WHERE category=? AND closed_at IS NULL"
             " ORDER BY created_at DESC", (category,))
         return _hydrate(rows[0]) if rows else None
+
+    def active(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Returns all unresolved active incidents."""
+        rows = self.db.query(
+            "SELECT * FROM incidents WHERE closed_at IS NULL AND state != 'RESOLVED'"
+            " ORDER BY created_at DESC LIMIT ?", (limit,))
+        return [_hydrate(r) for r in rows]
 
     def list(self, state: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
         if state:

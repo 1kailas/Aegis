@@ -1,7 +1,9 @@
 # Aegis AI — Autonomous Infrastructure Monitoring & Engineering Platform
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Tests Passing](https://img.shields.io/badge/tests-41%2F41%20passed-brightgreen.svg)]()
+[![Version: 1.5.0](https://img.shields.io/badge/version-1.5.0-blue.svg)]()
+[![Tests Passing](https://img.shields.io/badge/tests-46%2F46%20passed-brightgreen.svg)]()
+[![Prometheus Ready](https://img.shields.io/badge/prometheus-%2Fmetrics-orange.svg)]()
 [![Security: Hardened](https://img.shields.io/badge/security-hardened-blue.svg)](SECURITY.md)
 [![Agents: Devin Protocol](https://img.shields.io/badge/agents-Devin%20protocol-purple.svg)](AGENTS.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -316,5 +318,6 @@ PYTHONPATH=. .venv/bin/pytest tests/ -v
 - **`tests/test_phase3.py` (8 tests)**: 3-tier diagnosis fallback, Gemini hourly rate limiting, credential scrubbing, Devin task creation & queueing, policy engine allowlists and prohibited command rejection.
 - **`tests/test_phase4.py` (7 tests)**: Isolated sandbox clones, patch scope enforcement (`.env` and path traversal rejection), environment variable sanitization, GitHub PR evidence generation, independent recovery verification.
 - **`tests/test_phase5.py` (4 tests)**: End-to-end autonomous lifecycle simulation (Detect → Diagnose → Plan → Authorize → Validate → PR → Verify Recovery), injection security hardening, operator approval mode enforcement, target-aware live probe verification, and static dashboard & OpenAPI delivery.
+- **`tests/test_v15.py` (5 tests)**: Predictive telemetry forecasting (OLS linear regression & TTE calculations), closed-loop autonomous self-healing engine (triage, auto-remediation, and dead-letter escalation), synthetic HTTP/TCP probers, Prometheus metrics exposition line protocol, and v1.5 API endpoints.
 
-**Result: 41 passed in 4.8 seconds.**
+**Result: 46 passed in 7.4 seconds.**

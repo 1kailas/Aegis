@@ -201,7 +201,39 @@ async function pollSensors() {
 
     const inv = await (await fetch("/api/system/inventory")).json();
     renderInventory(inv);
+
+    const forecasts = await (await fetch("/api/forecasting/forecasts")).json();
+    renderForecasts(forecasts);
   } catch {}
+}
+
+function renderForecasts(forecasts) {
+  const c = $("forecastContainer");
+  if (!c) return;
+  const mem = forecasts.memory || {};
+  const disks = forecasts.disks || {};
+  let items = [];
+  if (mem.metric_name) {
+    const sevClass = mem.severity === "CRITICAL" ? "chip ERROR" : mem.severity === "WARNING" ? "chip STALE" : "chip VALID";
+    items.push(`
+      <div class="summary-item">
+        <div class="title">RAM Consumption Time-To-Exhaustion (TTE)</div>
+        <div>Current: <strong>${mem.current_value.toFixed(1)}%</strong> | Rate: <strong>${mem.rate_per_sec > 0 ? "+" : ""}${mem.rate_per_sec.toFixed(3)}%/s</strong></div>
+        <div style="margin-top:4px;">Projected TTE: <span class="${sevClass}">${mem.tte_human}</span> (Confidence: ${(mem.confidence * 100).toFixed(0)}%)</div>
+      </div>
+    `);
+  }
+  for (const [mount, f] of Object.entries(disks)) {
+    const sevClass = f.severity === "CRITICAL" ? "chip ERROR" : f.severity === "WARNING" ? "chip STALE" : "chip VALID";
+    items.push(`
+      <div class="summary-item">
+        <div class="title">Disk Partition [${mount}] Time-To-Exhaustion (TTE)</div>
+        <div>Current: <strong>${f.current_value.toFixed(1)}%</strong> | Rate: <strong>${f.rate_per_sec > 0 ? "+" : ""}${f.rate_per_sec.toFixed(3)}%/s</strong></div>
+        <div style="margin-top:4px;">Projected TTE: <span class="${sevClass}">${f.tte_human}</span></div>
+      </div>
+    `);
+  }
+  c.innerHTML = items.join("") || '<div class="muted">Awaiting telemetry samples for linear projection...</div>';
 }
 
 function renderSensorsTable(sensors) {

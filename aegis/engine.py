@@ -181,6 +181,29 @@ class MonitoringEngine(threading.Thread):
         )
         snap["resource_state"] = resource_state.as_dict()
 
+        # Predictive Telemetry Forecasting & TTE
+        mem_pct = float(snap["memory"]["percent"])
+        ctx.forecaster.feed("memory_percent", mem_pct)
+        ctx.forecaster.feed("cpu_percent", float(snap.get("cpu_percent") or 0.0))
+        for d in disks_data:
+            mount = d.get("mount", "/")
+            ctx.forecaster.feed(f"disk_{mount}", float(d.get("used_pct", 0.0)))
+
+        mem_forecast = ctx.forecaster.forecast_exhaustion("memory_percent", capacity=100.0)
+        snap["forecasts"] = {"memory": mem_forecast.as_dict()}
+
+        if mem_forecast.is_exhaustion_imminent and mem_forecast.severity in ("WARNING", "CRITICAL"):
+            active = ctx.incidents.active_by_category("predictive_memory_exhaustion")
+            if not active:
+                ctx.incidents.create(
+                    category="predictive_memory_exhaustion",
+                    severity="critical" if mem_forecast.severity == "CRITICAL" else "warning",
+                    title="Predictive Memory Exhaustion Warning",
+                    summary=f"Projected memory exhaustion in {mem_forecast.tte_human} at current consumption rate ({mem_forecast.rate_per_sec:.2f}%/s)",
+                    host_id=ctx.identity.host_id,
+                    evidence=[{"kind": "forecast", "detail": mem_forecast.as_dict()}],
+                )
+
         # Workload & orchestration sampling
         if self._tick_count % 3 == 0 or self._tick_count == 1:
             try:
@@ -193,6 +216,14 @@ class MonitoringEngine(threading.Thread):
                 self._process_workload_incidents(docker_data, k8s_data)
             except Exception as e:
                 _LOG.debug("Workload orchestration tick error: %s", e)
+
+        # Synthetic Probing & Self-Healing Reconciliation
+        if self._tick_count % 2 == 0 or self._tick_count == 1:
+            try:
+                ctx.prober.probe_all()
+                ctx.self_healing.run_reconciliation_cycle()
+            except Exception as e:
+                _LOG.debug("Self-healing or synthetic probe tick note: %s", e)
 
         self._apply_policy(state, simulated, changed)
         self._maybe_prune()

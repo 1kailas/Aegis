@@ -10,7 +10,7 @@
 
 <header class="topbar">
   <div class="brand">
-    <span class="logo">⛨</span> Aegis AI <small id="ver">1.0.0</small>
+    <span class="logo">⛨</span> Aegis AI <small id="ver">1.5.0</small>
   </div>
   <div class="health" id="health">
     <span class="dot dot-warn"></span><span>connecting…</span>
@@ -125,6 +125,12 @@
         <h2>Host Hardware &amp; Software Inventory</h2>
         <div id="inventoryContainer" class="summary-list"></div>
       </div>
+    </div>
+
+    <div class="panel">
+      <h2>Predictive Telemetry Forecasting &amp; Time-To-Exhaustion (TTE) <span class="tag">v1.5</span></h2>
+      <p class="muted">Online linear regression projects when memory and storage partitions will reach capacity before physical thresholds are breached.</p>
+      <div id="forecastContainer" class="summary-list"></div>
     </div>
 
     <div class="panel">
@@ -269,6 +275,7 @@
 <footer>
   <span id="footNote">Aegis AI — Autonomous Infrastructure Engineer</span>
   <span class="spacer"></span>
+  <a href="/metrics" target="_blank" style="margin-right: 16px;">Prometheus Metrics (/metrics)</a>
   <a href="/api/docs" target="_blank">Interactive API Docs (Swagger)</a>
 </footer>
 

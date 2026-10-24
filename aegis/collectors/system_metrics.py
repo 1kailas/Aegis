@@ -54,6 +54,13 @@ class MetricsCollector:
     ) -> None:
         self._history.append((time.time(), snap, validity))
 
+    def latest(self) -> dict[str, Any] | None:
+        """Returns the most recent snapshot or collects a fresh one."""
+        if self._history:
+            return self._history[-1][1]
+        snap, _, _ = self.collect()
+        return snap
+
     def history(self, points: int | None = None) -> list[tuple]:
         items = list(self._history)
         return items[-points:] if points else items

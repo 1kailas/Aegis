@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, AsyncIterator
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
@@ -511,6 +511,55 @@ def create_app(ctx: AppContext) -> FastAPI:
 
         return StreamingResponse(gen(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache"})
+
+    # ------------------------------------------------------------- Prometheus Exporter
+    @app.get("/metrics")
+    def prometheus_metrics() -> Response:
+        from aegis.api.prometheus import generate_prometheus_metrics
+        text = generate_prometheus_metrics(ctx)
+        return Response(content=text, media_type="text/plain; version=0.0.4; charset=utf-8")
+
+    # ------------------------------------------------------------- Predictive Forecasting
+    @app.get("/api/forecasting/forecasts")
+    def get_forecasts() -> dict[str, Any]:
+        mem = ctx.forecaster.forecast_exhaustion("memory_percent", capacity=100.0)
+        snap = ctx.metrics.latest() or {}
+        disks = snap.get("disks", [])
+        disk_forecasts = {}
+        for d in disks:
+            mount = d.get("mount", "/")
+            f = ctx.forecaster.forecast_exhaustion(f"disk_{mount}", capacity=100.0)
+            disk_forecasts[mount] = f.as_dict()
+        return {
+            "memory": mem.as_dict(),
+            "disks": disk_forecasts,
+        }
+
+    # ------------------------------------------------------------- Autonomous Self-Healing
+    @app.post("/api/self_healing/reconcile", dependencies=[Depends(_auth_dp(ctx))])
+    def trigger_self_healing() -> dict[str, Any]:
+        report = ctx.self_healing.run_reconciliation_cycle()
+        return report.as_dict()
+
+    # ------------------------------------------------------------- Synthetic Probers
+    @app.get("/api/probers/summary")
+    def get_prober_summary() -> dict[str, Any]:
+        return ctx.prober.get_summary()
+
+    @app.post("/api/probers/targets", dependencies=[Depends(_auth_dp(ctx))])
+    def add_probe_target(payload: dict[str, Any]) -> dict[str, Any]:
+        from aegis.orchestration.probers import ProbeTarget
+        target = ProbeTarget(
+            name=payload.get("name", f"target-{int(time.time())}"),
+            target_type=payload.get("target_type", "http"),
+            endpoint=payload.get("endpoint", ""),
+            sla_latency_ms=float(payload.get("sla_latency_ms", 500.0)),
+            timeout_s=float(payload.get("timeout_s", 5.0)),
+            expected_status=int(payload.get("expected_status", 200)),
+            expected_substring=payload.get("expected_substring", ""),
+        )
+        ctx.prober.add_target(target)
+        return {"added": target.name, "target": target.__dict__}
 
     # ------------------------------------------------------------ policy & demo
     @app.post("/api/policy/mode", dependencies=[Depends(_auth_dp(ctx))])

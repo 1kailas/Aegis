@@ -4,6 +4,21 @@ All notable changes to the **Aegis AI** platform are documented in this file in 
 
 ---
 
+## 2026-10-24T23:35:00+05:30 — Aegis AI v1.5.0: Predictive Forecasting, Closed-Loop Autonomy & Observability
+
+- **Changed:**
+  - Implemented `TelemetryForecaster` in `aegis/intelligence/forecasting.py` using online ordinary least squares (OLS) linear regression to project rate-of-change and Time-To-Exhaustion (TTE) for RAM and disk storage partitions before physical thresholds are breached.
+  - Implemented `SelfHealingEngine` in `aegis/control_plane/self_healing.py` executing autonomous closed-loop reconciliation cycles: pairs detected incidents with multi-tier diagnosis, authorizes allowlisted remediations (`policy_autonomous`), delegates code/config defects to Devin, and enforces dead-letter escalation (`NEEDS_HUMAN_APPROVAL`) on repeated failures.
+  - Implemented `SyntheticProber` in `aegis/orchestration/probers.py` executing continuous HTTP and TCP canary probes to monitor endpoint health, response validity, and latency SLAs.
+  - Implemented standardized Prometheus metrics exporter endpoint at `GET /metrics` in `aegis/api/prometheus.py` exposing host vitals, guardian states, active incidents, and container counts.
+  - Upgraded unified dashboard with a real-time **Predictive Forecasting & TTE** panel on the Hardware tab, and linked the Prometheus `/metrics` exposition format in the footer.
+  - Added comprehensive v1.5 automated test suite in `tests/test_v15.py` (5 tests).
+- **Why:** Delivers enterprise-grade predictive prevention, proactive capacity planning, closed-loop self-healing, and native Prometheus integration.
+- **Validation:** Executed full test suite: `PYTHONPATH=. .venv/bin/pytest tests/ -v`. All 46 tests passed in 7.46s.
+- **Limitations:** None.
+
+---
+
 ## 2026-10-24T23:26:00+05:30 — Production Hardening, Bug Fixes & Operational Protocols
 
 - **Changed:**
