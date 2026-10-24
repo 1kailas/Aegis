@@ -42,18 +42,19 @@ TERMINAL = {
 ALLOWED_TRANSITIONS: dict[str, set[str]] = {
     "DETECTED": {
         "INVESTIGATING", "CONTAINMENT_REQUIRED", "CONTAINED",
+        "REPAIRING", "VALIDATING", "PR_OPENED", "RECOVERY_VERIFIED",
         "INSUFFICIENT_EVIDENCE", "CLOSED_WITHOUT_REPAIR",
     },
     "INVESTIGATING": {
-        "CONTAINMENT_REQUIRED", "CONTAINED", "REPAIRING",
-        "NEEDS_HUMAN_APPROVAL", "INSUFFICIENT_EVIDENCE",
+        "CONTAINMENT_REQUIRED", "CONTAINED", "REPAIRING", "VALIDATING",
+        "PR_OPENED", "NEEDS_HUMAN_APPROVAL", "INSUFFICIENT_EVIDENCE",
         "RECOVERY_VERIFIED", "CLOSED_WITHOUT_REPAIR",
     },
     "CONTAINMENT_REQUIRED": {"CONTAINED", "RECOVERY_FAILED"},
-    "CONTAINED": {"REPAIRING", "RECOVERY_VERIFIED", "RECOVERY_FAILED",
+    "CONTAINED": {"REPAIRING", "VALIDATING", "PR_OPENED", "RECOVERY_VERIFIED", "RECOVERY_FAILED",
                   "CLOSED_WITHOUT_REPAIR"},
-    "REPAIRING": {"VALIDATING", "REPAIR_REJECTED", "RECOVERY_FAILED"},
-    "VALIDATING": {"PR_READY", "REPAIR_REJECTED", "RECOVERY_FAILED"},
+    "REPAIRING": {"VALIDATING", "PR_READY", "PR_OPENED", "REPAIR_REJECTED", "RECOVERY_FAILED"},
+    "VALIDATING": {"PR_READY", "PR_OPENED", "REPAIR_REJECTED", "RECOVERY_FAILED"},
     "PR_READY": {"PR_OPENED", "REPAIR_REJECTED"},
     "PR_OPENED": {"RECOVERY_VERIFIED", "RECOVERY_FAILED"},
     "NEEDS_HUMAN_APPROVAL": {"REPAIRING", "CLOSED_WITHOUT_REPAIR"},
@@ -115,7 +116,7 @@ class IncidentStore:
                 f"Illegal incident transition {current} -> {new_state}"
             )
         now = utcnow()
-        lifecycle = json.loads(row["lifecycle"] or "[]")
+        lifecycle = row["lifecycle"] if isinstance(row["lifecycle"], list) else json.loads(row["lifecycle"] or "[]")
         lifecycle.append(
             {"ts": now, "from": current, "state": new_state,
              "actor": actor, "note": note})
@@ -131,7 +132,7 @@ class IncidentStore:
         row = self.get(incident_id)
         if row is None:
             raise KeyError(f"Incident '{incident_id}' not found")
-        evidence = json.loads(row["evidence"] or "[]")
+        evidence = row["evidence"] if isinstance(row["evidence"], list) else json.loads(row["evidence"] or "[]")
         evidence.append(item)
         self.db.execute(
             "UPDATE incidents SET evidence=?, updated_at=? WHERE id=?",

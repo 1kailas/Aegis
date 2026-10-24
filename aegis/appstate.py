@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from aegis.collectors.gpu import GpuCollector
@@ -27,6 +28,9 @@ from aegis.control_plane.policy import PolicyExecutor
 from aegis.control_plane.resource_guardian import ResourceGuardian, ResourcePolicy
 from aegis.control_plane.thermal_guardian import ThermalGuardian
 from aegis.engineering.devin_adapter import DevinAdapter
+from aegis.engineering.github_adapter import GitHubAdapter
+from aegis.engineering.recovery_verifier import RecoveryVerifier
+from aegis.engineering.workspace import IsolatedWorkspaceManager
 from aegis.intelligence.diagnosis import IncidentDiagnoser
 from aegis.orchestration.ai_workloads import AIWorkloadMonitor
 from aegis.orchestration.dependency_graph import DependencyGraph
@@ -136,6 +140,10 @@ class AppContext:
         )
         self.devin = DevinAdapter(self.db)
         self.remediation = RemediationPolicyEngine(self.db, self.events)
+        repo_root = Path(__file__).resolve().parent.parent
+        self.workspace_mgr = IsolatedWorkspaceManager(base_repo_dir=repo_root)
+        self.github = GitHubAdapter(repo_dir=repo_root, token=config.github_token)
+        self.recovery_verifier = RecoveryVerifier(self.db, self.events)
 
         self.flags = RuntimeFlags(config, self.db)
         self.guardian = ThermalGuardian(

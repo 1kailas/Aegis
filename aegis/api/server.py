@@ -352,6 +352,116 @@ def create_app(ctx: AppContext) -> FastAPI:
         )
         return result
 
+    # ------------------------------------------------------------- Phase 4: Repair & GitHub
+    @app.get("/api/github/status")
+    def github_status() -> dict[str, Any]:
+        return ctx.github.status()
+
+    @app.post("/api/repair/validate")
+    def repair_validate(payload: dict[str, Any]) -> dict[str, Any]:
+        task_id = payload.get("task_id", f"task-{int(time.time())}")
+        patch_text = payload.get("patch", "")
+        test_commands = payload.get("test_commands", ["pytest -q tests/test_phase1.py"])
+        if not patch_text:
+            raise HTTPException(status_code=422, detail="Patch text required")
+
+        report = ctx.workspace_mgr.apply_and_validate(
+            task_id=task_id,
+            patch_text=patch_text,
+            test_commands=test_commands,
+        )
+        ctx.events.emit(
+            "repair_validation",
+            f"Validation {'PASSED' if report.passed else 'FAILED'} for {task_id}",
+            "info" if report.passed else "warning",
+            report=report.as_dict(),
+        )
+        return report.as_dict()
+
+    @app.post("/api/repair/submit_pr", dependencies=[Depends(_auth_dp(ctx))])
+    def repair_submit_pr(payload: dict[str, Any]) -> dict[str, Any]:
+        incident_id = payload.get("incident_id")
+        task_id = payload.get("task_id", f"task-{int(time.time())}")
+        branch_name = payload.get("branch_name", f"aegis/repair-{task_id}")
+        commit_message = payload.get("commit_message", f"fix(auto-repair): resolve {incident_id}")
+        mode = payload.get("mode", "dry_run" if ctx.flags.mode == "monitoring_only" else "real")
+
+        inc = ctx.incidents.get(incident_id) if incident_id else {"id": incident_id, "title": "Auto Repair"}
+        validation_data = payload.get("validation_report")
+        if not validation_data:
+            raise HTTPException(status_code=422, detail="validation_report required")
+
+        from aegis.engineering.workspace import ValidationReport, ValidationStepResult
+        steps = [
+            ValidationStepResult(
+                command=s.get("command", ""),
+                exit_code=s.get("exit_code", 0),
+                duration_s=s.get("duration_s", 0.0),
+                stdout=s.get("stdout", ""),
+                stderr=s.get("stderr", ""),
+                passed=s.get("passed", True),
+            )
+            for s in validation_data.get("steps", [])
+        ]
+        val_report = ValidationReport(
+            task_id=task_id,
+            passed=validation_data.get("passed", False),
+            scope_valid=validation_data.get("scope_valid", False),
+            changed_files=validation_data.get("changed_files", []),
+            steps=steps,
+            rejection_reason=validation_data.get("rejection_reason"),
+        )
+
+        if not val_report.passed:
+            raise HTTPException(status_code=400, detail="Cannot open PR for unverified or failing repair")
+
+        pr_res = ctx.github.create_repair_pr(
+            incident=inc or {},
+            validation_report=val_report,
+            branch_name=branch_name,
+            commit_message=commit_message,
+            mode=mode,
+        )
+
+        if pr_res.success and incident_id:
+            ctx.incidents.append_evidence(
+                incident_id,
+                {"kind": "github_pr", "pr_url": pr_res.pr_url, "pr_number": pr_res.pr_number},
+            )
+            ctx.incidents.transition(incident_id, "PR_OPENED", "github_adapter", note=f"Opened PR {pr_res.pr_url}")
+
+        return pr_res.as_dict()
+
+    @app.post("/api/repair/verify_recovery")
+    def repair_verify_recovery(payload: dict[str, Any]) -> dict[str, Any]:
+        incident_id = payload.get("incident_id")
+        target = payload.get("target", "host")
+
+        # Live probe function
+        def probe():
+            snap, val, _ = ctx.metrics.collect()
+            cpu_ok = snap.get("cpu_percent", 0) < 90.0
+            mem_ok = snap["memory"]["percent"] < 90.0
+            healthy = cpu_ok and mem_ok
+            return healthy, f"CPU={snap.get('cpu_percent')}%, Mem={snap['memory']['percent']}%", snap
+
+        rec = ctx.recovery_verifier.verify_workload_recovery(
+            incident_id=incident_id or f"INC-{int(time.time())}",
+            target=target,
+            check_fn=probe,
+        )
+
+        if rec.status.value == "CONFIRMED" and incident_id:
+            try:
+                ctx.incidents.transition(
+                    incident_id, "RECOVERY_VERIFIED", "recovery_verifier",
+                    note=f"Workload {target} confirmed stabilized"
+                )
+            except Exception:
+                pass
+
+        return rec.as_dict()
+
     @app.get("/api/actions")
     def actions(limit: int = 25) -> list[dict[str, Any]]:
         rows = ctx.db.query(
