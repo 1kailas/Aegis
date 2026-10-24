@@ -488,6 +488,13 @@ def create_app(ctx: AppContext) -> FastAPI:
         from fastapi.responses import RedirectResponse
         return RedirectResponse(url="/api/docs")
 
+    @app.get("/documentation", include_in_schema=False)
+    @app.get("/guide", include_in_schema=False)
+    @app.get("/manual", include_in_schema=False)
+    def documentation_page():
+        from fastapi.responses import FileResponse
+        return FileResponse(STATIC_DIR / "docs.html")
+
     @app.post("/api/repair/verify_recovery")
     def repair_verify_recovery(payload: dict[str, Any]) -> dict[str, Any]:
         incident_id = payload.get("incident_id")

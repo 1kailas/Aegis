@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aegis AI Documentation — Autonomous Infrastructure Control Plane</title>
+  <meta name="description" content="Comprehensive A-to-Z User & Developer Manual for Aegis AI: Continuous Monitoring, Hardware Profiling, AI Model Deployment, Devin Incident Repair, and Distributed Cluster Mesh.">
+  <link rel="stylesheet" href="/static/docs.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⛨</text></svg>">
+</head>
+<body>
+
+<!-- Header -->
+<header class="docs-header">
+  <a href="/documentation" class="brand-wrap">
+    <span class="brand-icon">⛨</span>
+    <span class="brand-name">Aegis AI Docs</span>
+    <span class="brand-tag">v3.1.0</span>
+  </a>
+
+  <button class="search-trigger-btn" id="searchTriggerBtn">
+    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+    <span>Search documentation...</span>
+    <span class="search-shortcut">⌘K</span>
+  </button>
+
+  <nav class="topbar-nav">
+    <a href="/" class="btn-dash" title="Open Aegis Control Plane">Live Dashboard</a>
+    <a href="/api/docs" target="_blank" title="OpenAPI Swagger Interactive UI">OpenAPI Docs</a>
+    <a href="https://github.com/1kailas/Aegis.git" target="_blank" title="GitHub Repository">
+      <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+      GitHub
+    </a>
+  </nav>
+</header>
+
+<div class="docs-container">
+  <!-- Left Navigation Sidebar -->
+  <aside class="docs-sidebar">
+    <div class="nav-section-title">Getting Started</div>
+    <ul class="nav-list">
+      <li class="nav-item"><a href="#intro" class="active">Overview &amp; Vision</a></li>
+      <li class="nav-item"><a href="#quickstart">5-Minute Quickstart</a></li>
+      <li class="nav-item"><a href="#installation">Installation Options</a></li>
+      <li class="nav-item"><a href="#client-server">Client &amp; Server Setup</a></li>
+    </ul>
+
+    <div class="nav-section-title">Architecture &amp; Safety</div>
+    <ul class="nav-list">
+      <li class="nav-item"><a href="#architecture">Dual-Plane Architecture</a></li>
+      <li class="nav-item"><a href="#safety-guardrails">Deterministic Guardians</a></li>
+      <li class="nav-item"><a href="#diagnosis-plane">3-Tier Diagnosis Engine</a></li>
+      <li class="nav-item"><a href="#devin-protocol">Devin Repair Protocol</a></li>
+      <li class="nav-item"><a href="#ten-principles">The 10 Inviolable Principles</a></li>
+    </ul>
+
+    <div class="nav-section-title">Distributed Cluster Mesh</div>
+    <ul class="nav-list">
+      <li class="nav-item"><a href="#cluster-mesh">Cluster Mesh Overview</a></li>
+      <li class="nav-item"><a href="#remote-joining">Zero-Friction Remote Joining</a></li>
+      <li class="nav-item"><a href="#agent-daemon">Aegis Agent Daemon</a></li>
+      <li class="nav-item"><a href="#fleet-capacity">Fleet Capacity Aggregation</a></li>
+    </ul>
+
+    <div class="nav-section-title">AI Model Hub &amp; Deployer</div>
+    <ul class="nav-list">
+      <li class="nav-item"><a href="#model-recommender">Hardware Profiling &amp; Tiers <span class="nav-pill info">v3.0</span></a></li>
+      <li class="nav-item"><a href="#one-click-deploy">1-Click Docker &amp; K8s Deploy</a></li>
+      <li class="nav-item"><a href="#model-benchmarking">Real-Time Benchmarking <span class="nav-pill ok">v3.1</span></a></li>
+      <li class="nav-item"><a href="#memory-optimizer">Dynamic VRAM Optimizer <span class="nav-pill ok">v3.1</span></a></li>
+      <li class="nav-item"><a href="#cluster-ai-capacity">Cluster AI Capacity Planner</a></li>
+    </ul>
+
+    <div class="nav-section-title">Autonomous Operations</div>
+    <ul class="nav-list">
+      <li class="nav-item"><a href="#self-healing">Closed-Loop Self-Healing</a></li>
+      <li class="nav-item"><a href="#canary-rollouts">Canary Rollouts &amp; Rollback</a></li>
+      <li class="nav-item"><a href="#notifications">Multi-Channel Notifications</a></li>
+      <li class="nav-item"><a href="#security-rbac">Security &amp; RBAC Keys</a></li>
+    </ul>
+
+    <div class="nav-section-title">Reference Manuals</div>
+    <ul class="nav-list">
+      <li class="nav-item"><a href="#cli-reference">Developer CLI Reference <span class="nav-pill purple">CLI</span></a></li>
+      <li class="nav-item"><a href="#api-reference">REST API Specification <span class="nav-pill purple">API</span></a></li>
+      <li class="nav-item"><a href="#troubleshooting">Operations &amp; FAQ</a></li>
+    </ul>
+  </aside>
+
+  <!-- Main Article Pane -->
+  <main class="docs-main">
+    <article class="docs-article">
+
+      <!-- Section: Intro -->
+      <section id="intro">
+        <h1>Aegis AI Documentation</h1>
+        <p class="docs-subtitle">Autonomous Infrastructure Engineering Control Plane, Hardware-Aware Model Recommender, and One-Click Cloud Native Deployer.</p>
+
+        <p><strong>Aegis AI</strong> is an enterprise-grade infrastructure monitoring and engineering control plane designed for modern compute clusters, containerized workloads (Docker &amp; Kubernetes), and on-premise AI model serving. It continuously observes host telemetry, protects hardware with deterministic safety guardians, automatically triages and diagnoses failures using local and cloud AI models, delegates repository repairs to <strong>Devin</strong>, and validates fixes before PR submission.</p>
+
+        <div class="callout tip">
+          <div class="callout-title">The Central Architectural Invariant</div>
+          <strong>Aegis monitors and orchestrates. Deterministic controllers enforce safety. AI investigates and engineers fixes. Independent verification determines whether the fix actually worked.</strong>
+        </div>
+
+        <div class="feature-grid">
+          <div class="feature-card">
+            <div class="feature-icon">🛡️</div>
+            <div class="feature-title">Dual-Plane Safety</div>
+            <div class="feature-desc">Critical thermal, PSI, and resource limits are hardcoded deterministic algorithms that operate 100% offline without cloud LLM dependencies.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🌐</div>
+            <div class="feature-title">Distributed Cluster Mesh</div>
+            <div class="feature-desc">Connect any Linux client device in seconds simply by supplying the server IP address. Zero manual package compilation required.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🧠</div>
+            <div class="feature-title">AI Model Hub &amp; Deployer</div>
+            <div class="feature-desc">Profiles host VRAM, RAM, and CPU cores to categorize models into Best, Marginal, and Worst fit tiers, deployable with 1-click to Docker or K8s.</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">⚡</div>
+            <div class="feature-title">Live Benchmarking &amp; Optimizer</div>
+            <div class="feature-desc">Empirically benchmarks Time-To-First-Token (TTFT) and decoding tokens/sec while proactively evicting idle models to avoid OOM kills.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section: Quickstart -->
+      <section id="quickstart">
+        <h2>5-Minute Quickstart</h2>
+        <p>Get an Aegis AI control plane and worker agent up and running in under five minutes.</p>
+
+        <h3>Step 1: Start the Aegis Server</h3>
+        <p>The server runs the centralized dashboard, SQLite WAL database, and self-healing orchestrator:</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span class="lang-tag">bash</span>
+            <button class="copy-btn" onclick="copySnippet('git clone https://github.com/1kailas/Aegis.git\ncd Aegis\npython3 -m venv .venv\nsource .venv/bin/activate\npip install -e .\naegis-server --host 0.0.0.0 --port 8000')">Copy</button>
+          </div>
+          <pre><code># 1. Clone the repository
+git clone https://github.com/1kailas/Aegis.git
+cd Aegis
+
+# 2. Setup virtual environment &amp; install
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+
+# 3. Launch the Aegis Control Plane server
+aegis-server --host 0.0.0.0 --port 8000</code></pre>
+        </div>
+
+        <p>Once started, the following services are available immediately:</p>
+        <ul>
+          <li><strong>Web Dashboard:</strong> <a href="http://localhost:8000" target="_blank"><code>http://localhost:8000</code></a></li>
+          <li><strong>Interactive Documentation:</strong> <a href="http://localhost:8000/documentation" target="_blank"><code>http://localhost:8000/documentation</code></a></li>
+          <li><strong>OpenAPI Swagger UI:</strong> <a href="http://localhost:8000/api/docs" target="_blank"><code>http://localhost:8000/api/docs</code></a></li>
+          <li><strong>Prometheus Scrape Endpoint:</strong> <a href="http://localhost:8000/metrics" target="_blank"><code>http://localhost:8000/metrics</code></a></li>
+        </ul>
+
+        <h3>Step 2: Inspect Status with the Developer CLI</h3>
+        <p>In another terminal, use the unified <code>aegis</code> CLI tool:</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span class="lang-tag">bash</span>
+            <button class="copy-btn" onclick="copySnippet('aegis status')">Copy</button>
+          </div>
+          <pre><code>aegis status</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Installation -->
+      <section id="installation">
+        <h2>Installation Options</h2>
+
+        <h3>Option A: Automated One-Line Linux Installer</h3>
+        <p>Recommended for production hosts and server nodes. Automatically installs virtual environment, links binaries to <code>/usr/local/bin</code>, and provisions systemd background services:</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span class="lang-tag">bash</span>
+            <button class="copy-btn" onclick="copySnippet('./scripts/install.sh --role all')">Copy</button>
+          </div>
+          <pre><code>./scripts/install.sh --role all</code></pre>
+        </div>
+
+        <h3>Option B: Docker Compose</h3>
+        <p>Deploy the control plane and a co-located monitoring agent in isolated containers:</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span class="lang-tag">bash</span>
+            <button class="copy-btn" onclick="copySnippet('docker-compose up -d')">Copy</button>
+          </div>
+          <pre><code>docker-compose up -d</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Client & Server Architecture -->
+      <section id="client-server">
+        <h2>Client &amp; Server Setup</h2>
+        <p>Aegis is architected as a distributed platform consisting of two primary software packages:</p>
+
+        <table class="docs-table">
+          <thead>
+            <tr>
+              <th>Component</th>
+              <th>Binary</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Aegis Server</strong></td>
+              <td><code>aegis-server</code></td>
+              <td>The centralized control plane, SQLite WAL database, real-time SRE dashboard, self-healing reconciler, and cluster mesh coordinator.</td>
+            </tr>
+            <tr>
+              <td><strong>Aegis Agent</strong></td>
+              <td><code>aegis-agent</code></td>
+              <td>A lightweight, zero-dependency telemetry daemon that runs on any remote worker machine, periodically reporting host health and container state to the server.</td>
+            </tr>
+            <tr>
+              <td><strong>Developer CLI</strong></td>
+              <td><code>aegis</code></td>
+              <td>The operator and developer CLI for querying cluster health, managing incidents, triggering canary rollbacks, profiling models, and deploying containers.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Section: Dual-Plane Architecture -->
+      <section id="architecture">
+        <h2>Dual-Plane Safety Architecture</h2>
+        <p>Traditional autonomous agents risk dangerous runaway executions when given unconstrained host shells. Aegis solves this with a <strong>dual-plane architecture</strong> that enforces deterministic physical boundaries:</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span class="lang-tag">architecture</span>
+          </div>
+          <pre><code>       +-------------------------------------------------------+
+       |                  Aegis Control Plane                  |
+       +-------------------------------------------------------+
+            |                          |                     |
+   [Telemetry Pipeline]       [Action Policy Engine]   [Unified Dashboard]
+   - CPU, RAM, PSI, NVMe      - Risk Classification    - Real-time Telemetry
+   - Docker &amp; Kubernetes      - Emergency Stop State   - Topology Graph
+   - AI Serving (Ollama/vLLM) - Rate Limits &amp; Audits   - Incidents &amp; Actions
+            |                          |                     |
+            +------------+-------------+---------------------+
+                         |
+           +-------------v-------------+
+           | Incident Detection Engine |
+           +-------------+-------------+
+                         |
+           +-------------v-------------+
+           | 3-Tier Multi-Engine Diag  |
+           | 1. Local Ollama (qwen2.5) |
+           | 2. Cloud Gemini (budgeted)|
+           | 3. Deterministic Rules    |
+           +-------------+-------------+
+                         |
+           +-------------v-------------+
+           | Devin Repair Delegation   |
+           +-------------+-------------+
+                         |
+           +-------------v-------------+
+           | Isolated Sandboxes        |
+           | - Scope check (.env reject|
+           | - Test suite validation   |
+           +-------------+-------------+
+                         |
+           +-------------v-------------+
+           | Evidence-Backed GitHub PR |
+           | - Test logs &amp; exit codes  |
+           | - Security checklist      |
+           +-------------+-------------+
+                         |
+           +-------------v-------------+
+           | Independent Recovery Verif|
+           | - Live probe verification |
+           +---------------------------+</code></pre>
+        </div>
+
+        <h3>1. Deterministic Safety Plane</h3>
+        <p>Operates 100% locally and offline. Monitors Linux Pressure Stall Information (PSI), CPU thermal throttling states, memory exhaustion, and NVMe health. It uses deterministic thresholds, hysteresis curves, and hold times to prevent flapping. Prohibited commands (e.g. <code>rm -rf /</code>, bash pipes, reading secrets) are hardcoded and mathematically rejected.</p>
+
+        <h3>2. AI Diagnostic &amp; Engineering Plane</h3>
+        <p>When an incident occurs, telemetry and redacted logs are evaluated by a 3-tier fallback engine. If the incident stems from a code or configuration bug, Aegis delegates the task to <strong>Devin</strong> as its intelligent repair engineer, providing sanitized logs, failure traces, and reproduction commands.</p>
+
+        <h3>3. Independent Verification Plane</h3>
+        <p>Never trusts patches or claims of success blindly. Fixes are tested in ephemeral local git sandboxes, and post-remediation health is verified with independent live probes before an incident is marked resolved.</p>
+      </section>
+
+      <!-- Section: Deterministic Guardians -->
+      <section id="safety-guardrails">
+        <h2>Deterministic Guardians</h2>
+        <p>Aegis includes two primary deterministic guardians that protect physical hardware from degradation or sudden hardware death:</p>
+
+        <h3>ThermalGuardian</h3>
+        <ul>
+          <li><strong>Configurable Thresholds:</strong> Warning (°C), Critical (°C), and Recovery (°C).</li>
+          <li><strong>Rate-of-Rise Alerting:</strong> Detects sudden thermal spikes (°C/sec) before the absolute threshold is hit.</li>
+          <li><strong>Hysteresis &amp; Cooldown:</strong> Enforces recovery hold periods (default: 60s) to prevent remediation flapping.</li>
+          <li><strong>Hardware-Aware Limits:</strong> Respects physical sensor capabilities without inventing fake numbers.</li>
+        </ul>
+
+        <h3>ResourceGuardian</h3>
+        <ul>
+          <li><strong>Memory Pressure:</strong> Monitors Available RAM, Swap usage, and Linux Memory PSI.</li>
+          <li><strong>Disk Space &amp; I/O:</strong> Monitors root and data mount utilization and IO latency.</li>
+          <li><strong>CPU Saturation:</strong> Monitors CPU load averages and CPU PSI stalls.</li>
+        </ul>
+      </section>
+
+      <!-- Section: 3-Tier Diagnosis Engine -->
+      <section id="diagnosis-plane">
+        <h2>3-Tier AI Diagnosis Engine</h2>
+        <p>To eliminate cloud dependency and protect operational continuity, Aegis uses a hierarchical 3-tier diagnosis engine:</p>
+
+        <table class="docs-table">
+          <thead>
+            <tr>
+              <th>Tier</th>
+              <th>Engine</th>
+              <th>Availability</th>
+              <th>Role</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Tier 1</strong></td>
+              <td>Local Ollama (<code>qwen2.5:1.5b</code>)</td>
+              <td>Local / On-Prem</td>
+              <td>Instant zero-latency diagnosis without internet or external API dependencies.</td>
+            </tr>
+            <tr>
+              <td><strong>Tier 2</strong></td>
+              <td>Cloud Google Gemini</td>
+              <td>Internet Reachable</td>
+              <td>Deep root-cause synthesis for complex multi-subsystem cascading failures. Enforces hourly rate limiting.</td>
+            </tr>
+            <tr>
+              <td><strong>Tier 3</strong></td>
+              <td>Deterministic Rule Engine</td>
+              <td>100% Offline</td>
+              <td>Deterministic expert rules (OOM detection, thermal throttling, crash loops) guaranteeing diagnosis continuity.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Section: Devin Repair Protocol -->
+      <section id="devin-protocol">
+        <h2>Devin Repair Protocol</h2>
+        <p>Aegis integrates with <strong>Devin</strong> as its designated autonomous software and infrastructure repair engineer:</p>
+
+        <ol>
+          <li><strong>Structured RepairTask:</strong> Formats failure traces, incident metadata, and explicit reproduction criteria into a clean specification.</li>
+          <li><strong>Ephemeral Sandbox Validation:</strong> Clones the target repository into an isolated workspace (<code>repair-workspaces/&lt;task_id&gt;</code>).</li>
+          <li><strong>Strict Patch Scope Check:</strong> Automatically rejects patches that attempt to modify <code>.env</code> files, modify GitHub Actions workflows, or traverse parent directories (<code>../</code>).</li>
+          <li><strong>Evidence-Backed GitHub PR:</strong> Submits pull requests using <code>gh</code> CLI containing complete test execution logs, exit codes, and verification checklists.</li>
+        </ol>
+      </section>
+
+      <!-- Section: Ten Inviolable Principles -->
+      <section id="ten-principles">
+        <h2>The 10 Inviolable Safety Principles</h2>
+        <p>Aegis operates according to ten non-negotiable operational invariants:</p>
+
+        <ol>
+          <li><strong>No AI Control Over Safety Mechanisms:</strong> Thermal and physical limits are deterministic code. AI models cannot alter physical protection thresholds.</li>
+          <li><strong>No Arbitrary Shell Execution:</strong> AI cannot execute arbitrary bash commands on the host. Actions are strictly bound to an allowlist.</li>
+          <li><strong>No Unverified Success Claims:</strong> An incident is never marked resolved simply because a PR was opened or patch compiled. Live probe verification is required.</li>
+          <li><strong>Zero Secret Leakage:</strong> Credentials, API tokens, and <code>.env</code> variables are scrubbed from telemetry, diagnosis prompts, and PR bodies.</li>
+          <li><strong>No Destructive Operations Without Approval:</strong> Destructive commands (e.g. dropping tables, stopping essential host daemons) require explicit human operator confirmation.</li>
+          <li><strong>No Cloud Dependency for Routine Monitoring:</strong> Whole-system telemetry and guardians function 100% offline.</li>
+          <li><strong>Zero Fabrication:</strong> Missing or unsupported sensors report <code>UNAVAILABLE</code>. No fake telemetry is ever generated.</li>
+          <li><strong>Explainable and Traceable:</strong> Every decision and transition is written to an immutable SQLite audit log.</li>
+          <li><strong>Graceful Degradation:</strong> If Docker, Kubernetes, or Ollama goes down, Aegis logs the state and continues monitoring remaining subsystems.</li>
+          <li><strong>Modular and Testable:</strong> High test coverage across all subsystems.</li>
+        </ol>
+      </section>
+
+      <!-- Section: Distributed Cluster Mesh -->
+      <section id="cluster-mesh">
+        <h2>Distributed Cluster Mesh</h2>
+        <p>Aegis extends from a single-machine monitor into a multi-node distributed cluster mesh.</p>
+
+        <div class="callout info">
+          <div class="callout-title">Zero Configuration Joining</div>
+          Any client machine running standard Linux with Python 3 can join the cluster mesh simply by specifying the Aegis server IP. No pip packages or git installations are required.
+        </div>
+
+        <h3>Connecting Any Client Machine</h3>
+        <p>Run the one-liner on the client machine, pointing to the server's IP address (e.g. <code>192.168.1.50</code>):</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span class="lang-tag">bash</span>
+            <button class="copy-btn" onclick="copySnippet('curl -sSL http://<SERVER_IP>:8000/agent.py | python3 - <SERVER_IP>')">Copy</button>
+          </div>
+          <pre><code># Instant Zero-Install Run (Runs standalone in user space)
+curl -sSL http://&lt;SERVER_IP&gt;:8000/agent.py | python3 - &lt;SERVER_IP&gt;</code></pre>
+        </div>
+
+        <p>For a persistent background daemon managed by systemd:</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="lang-tag">bash</span>
+            <button class="copy-btn" onclick="copySnippet('curl -sSL http://<SERVER_IP>:8000/install.sh | bash -s <SERVER_IP>')">Copy</button>
+          </div>
+          <pre><code># Automated systemd service installation
+curl -sSL http://&lt;SERVER_IP&gt;:8000/install.sh | bash -s &lt;SERVER_IP&gt;</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Model Hub & Deployer -->
+      <section id="model-recommender">
+        <h2>AI Model Optimization Hub &amp; Deployer (v3.0 &amp; v3.1)</h2>
+        <p>Aegis features a hardware-aware AI model intelligence engine that inspects host compute hardware and ranks open-source models based on physical feasibility.</p>
+
+        <h3>Deterministic Fit Tiers</h3>
+        <table class="docs-table">
+          <thead>
+            <tr>
+              <th>Fit Tier</th>
+              <th>Badge</th>
+              <th>Hardware Condition</th>
+              <th>Performance Profile</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>OPTIMAL</strong></td>
+              <td><span class="nav-pill ok">OPTIMAL</span></td>
+              <td>100% of weights fit in GPU VRAM with headroom for 32k KV cache.</td>
+              <td>Peak tokens/sec throughput, zero CPU layer offload, instant TTFT.</td>
+            </tr>
+            <tr>
+              <td><strong>GOOD</strong></td>
+              <td><span class="nav-pill info">GOOD</span></td>
+              <td>Weights fit in VRAM with headroom for standard 4k-8k context.</td>
+              <td>High tokens/sec throughput with minimal latency impact.</td>
+            </tr>
+            <tr>
+              <td><strong>MARGINAL</strong></td>
+              <td><span class="nav-pill" style="background:var(--warn-bg); color:var(--warn);">MARGINAL</span></td>
+              <td>Exceeds VRAM; requires partial layer spilling into system RAM.</td>
+              <td>4x–10x latency penalty due to PCIe bus bandwidth bottlenecks.</td>
+            </tr>
+            <tr>
+              <td><strong>INCOMPATIBLE</strong></td>
+              <td><span class="nav-pill" style="background:var(--crit-bg); color:var(--crit);">INCOMPATIBLE</span></td>
+              <td>Exceeds combined VRAM and RAM capacity.</td>
+              <td>High risk of CUDA Out-Of-Memory (OOM) kills or system crashes.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Supported Model Catalog</h3>
+        <p>The catalog includes top-performing open-source weights across 4 task domains:</p>
+        <ul>
+          <li><strong>Coding:</strong> Qwen 2.5 Coder (1.5B, 7B, 14B, 32B)</li>
+          <li><strong>Reasoning:</strong> DeepSeek R1 Distill (8B, 14B, 32B, 70B)</li>
+          <li><strong>Fast Chat &amp; Ops:</strong> Llama 3.3 (8B, 70B), Mistral v0.3 (7B), Phi-4 (14B)</li>
+          <li><strong>Embeddings:</strong> Nomic Embed Text v1.5 (8192-token context)</li>
+        </ul>
+      </section>
+
+      <!-- Section: 1-Click Cloud Native Deployer -->
+      <section id="one-click-deploy">
+        <h2>1-Click Cloud Native Deployment</h2>
+        <p>Deploy any recommended AI model without writing manual Docker commands or Kubernetes manifests.</p>
+
+        <h3>1-Click Docker Deployment</h3>
+        <p>Launches an optimized container with GPU passthrough (<code>--gpus all</code>) and persistent model cache:</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="lang-tag">bash</span>
+            <button class="copy-btn" onclick="copySnippet('aegis models deploy qwen2.5-coder:7b --runtime docker --port 11434')">Copy</button>
+          </div>
+          <pre><code>aegis models deploy qwen2.5-coder:7b --runtime docker --port 11434</code></pre>
+        </div>
+
+        <h3>1-Click Kubernetes Provisioning</h3>
+        <p>Generates production-grade Kubernetes YAML with resource requests/limits, readiness probes, and ClusterIP Services:</p>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="lang-tag">bash</span>
+            <button class="copy-btn" onclick="copySnippet('aegis models deploy deepseek-r1:8b --runtime k8s --port 11434')">Copy</button>
+          </div>
+          <pre><code>aegis models deploy deepseek-r1:8b --runtime k8s --port 11434</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Model Benchmarking -->
+      <section id="model-benchmarking">
+        <h2>Real-Time Model Benchmarking (v3.1)</h2>
+        <p>Empirically benchmark deployed or simulated models to measure true inference performance:</p>
+        <ul>
+          <li><strong>TTFT (Time-To-First-Token):</strong> Exact duration from prompt dispatch to the first emitted token chunk (ms).</li>
+          <li><strong>Decoding Throughput:</strong> Sustained token generation rate (tokens/second).</li>
+          <li><strong>Prompt Evaluation Rate:</strong> Prompt processing speed (tokens/second).</li>
+        </ul>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span class="lang-tag">bash</span>
+            <button class="copy-btn" onclick="copySnippet('aegis models benchmark qwen2.5-coder:7b')">Copy</button>
+          </div>
+          <pre><code>aegis models benchmark qwen2.5-coder:7b</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Memory Optimizer -->
+      <section id="memory-optimizer">
+        <h2>Dynamic VRAM Memory Optimizer (v3.1)</h2>
+        <p>Reclaim GPU VRAM and system memory during heavy traffic or thermal stress. Scans active inference runtimes and unloads idle models with <code>keep_alive: 0</code>:</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span class="lang-tag">bash</span>
+            <button class="copy-btn" onclick="copySnippet('aegis models optimize')">Copy</button>
+          </div>
+          <pre><code>aegis models optimize</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Closed-Loop Self-Healing -->
+      <section id="self-healing">
+        <h2>Closed-Loop Self-Healing</h2>
+        <p>Aegis executes autonomous reconciliation cycles over active incidents:</p>
+
+        <ol>
+          <li><strong>Detection:</strong> An anomaly is detected by guardians or workload probes (State: <code>DETECTED</code>).</li>
+          <li><strong>Triage &amp; Diagnosis:</strong> 3-tier diagnosis hypothesizes root cause (State: <code>INVESTIGATING</code>).</li>
+          <li><strong>Remediation:</strong> If allowlisted in <code>policy_autonomous</code> mode, safe remediations are executed (State: <code>CONTAINED</code>).</li>
+          <li><strong>Devin Delegation:</strong> Code or config defects are routed to Devin (State: <code>REPAIRING</code>).</li>
+          <li><strong>Independent Verification:</strong> Live probes verify workload recovery, transitioning incident directly to <code>RECOVERY_VERIFIED</code>.</li>
+        </ol>
+
+        <div class="callout warn">
+          <div class="callout-title">Emergency Stop</div>
+          At any time, an operator can trigger the global emergency stop kill-switch to immediately freeze all autonomous actions:
+          <code>aegis estop on</code>
+        </div>
+      </section>
+
+      <!-- Section: Canary Rollouts -->
+      <section id="canary-rollouts">
+        <h2>Progressive Delivery &amp; Canary Rollbacks</h2>
+        <p>Aegis monitors canary rollouts step-by-step. If error budgets or latency SLAs are breached during any step, Aegis triggers an immediate closed-loop automated rollback:</p>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span class="lang-tag">bash</span>
+            <button class="copy-btn" onclick="copySnippet('aegis canary list\naegis canary rollback <rollout_id>')">Copy</button>
+          </div>
+          <pre><code># Inspect active canary rollouts
+aegis canary list
+
+# Manually abort and rollback a canary
+aegis canary rollback &lt;rollout_id&gt;</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Security & RBAC -->
+      <section id="security-rbac">
+        <h2>Security &amp; RBAC Scoped Keys</h2>
+        <p>Aegis includes cryptographic API key management with SHA-256 token hashing:</p>
+
+        <table class="docs-table">
+          <thead>
+            <tr>
+              <th>Role</th>
+              <th>Permissions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>ADMIN</code></td>
+              <td>Full control: key generation, mode changes, emergency stop, deployment deletion.</td>
+            </tr>
+            <tr>
+              <td><code>OPERATOR</code></td>
+              <td>Workload deployment, canary advancement, manual remediation triggers.</td>
+            </tr>
+            <tr>
+              <td><code>READONLY</code></td>
+              <td>Inspection of telemetry, incidents, and audit logs. All POST/DELETE routes blocked (HTTP 403).</td>
+            </tr>
+            <tr>
+              <td><code>NODE_AGENT</code></td>
+              <td>Node registration, telemetry heartbeats, and graceful draining.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="code-block">
+          <div class="code-header">
+            <span class="lang-tag">bash</span>
+            <button class="copy-btn" onclick="copySnippet('aegis keys create --name worker-agent-1 --role NODE_AGENT')">Copy</button>
+          </div>
+          <pre><code>aegis keys create --name worker-agent-1 --role NODE_AGENT</code></pre>
+        </div>
+      </section>
+
+      <!-- Section: Developer CLI Reference -->
+      <section id="cli-reference">
+        <h2>Developer CLI Reference</h2>
+        <p>Complete syntax and usage guide for the unified <code>aegis</code> CLI:</p>
+
+        <table class="docs-table">
+          <thead>
+            <tr>
+              <th>Command</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>aegis status</code></td>
+              <td>High-density terminal dashboard of health, guardians, cluster, and active incidents.</td>
+            </tr>
+            <tr>
+              <td><code>aegis join &lt;IP&gt;</code></td>
+              <td>Quickly join a worker machine to the server cluster mesh.</td>
+            </tr>
+            <tr>
+              <td><code>aegis nodes list</code></td>
+              <td>List all registered cluster nodes, IP addresses, statuses, and hardware capacities.</td>
+            </tr>
+            <tr>
+              <td><code>aegis nodes drain &lt;id&gt;</code></td>
+              <td>Cordon and drain a node before scheduled maintenance.</td>
+            </tr>
+            <tr>
+              <td><code>aegis incidents list</code></td>
+              <td>List all active, contained, or repairing incidents.</td>
+            </tr>
+            <tr>
+              <td><code>aegis incidents diagnose &lt;id&gt;</code></td>
+              <td>Trigger multi-tier root-cause diagnosis for an incident.</td>
+            </tr>
+            <tr>
+              <td><code>aegis models recommend</code></td>
+              <td>Assess local hardware and rank models into fit tiers.</td>
+            </tr>
+            <tr>
+              <td><code>aegis models deploy &lt;name&gt;</code></td>
+              <td>1-click deployment to Docker or Kubernetes.</td>
+            </tr>
+            <tr>
+              <td><code>aegis models benchmark &lt;name&gt;</code></td>
+              <td>Execute empirical TTFT and token generation throughput benchmark.</td>
+            </tr>
+            <tr>
+              <td><code>aegis models optimize</code></td>
+              <td>Reclaim GPU VRAM and evict idle model instances.</td>
+            </tr>
+            <tr>
+              <td><code>aegis canary list</code></td>
+              <td>Inspect active canary rollouts.</td>
+            </tr>
+            <tr>
+              <td><code>aegis canary rollback &lt;id&gt;</code></td>
+              <td>Immediately abort and revert an active canary rollout.</td>
+            </tr>
+            <tr>
+              <td><code>aegis keys create -n &lt;name&gt;</code></td>
+              <td>Generate cryptographically hashed RBAC token.</td>
+            </tr>
+            <tr>
+              <td><code>aegis mode [mode]</code></td>
+              <td>Query or update operating mode (<code>monitoring_only</code>, <code>operator_approval</code>, <code>policy_autonomous</code>).</td>
+            </tr>
+            <tr>
+              <td><code>aegis estop [on|off]</code></td>
+              <td>Query or toggle global emergency stop kill-switch.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Section: REST API Reference -->
+      <section id="api-reference">
+        <h2>REST API Specification</h2>
+        <p>All endpoints return structured JSON. State-changing endpoints support Bearer RBAC authentication.</p>
+
+        <table class="docs-table">
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Path</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/api/health</code></td>
+              <td>System vitals, active guardian state, and mode.</td>
+            </tr>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/metrics</code></td>
+              <td>OpenMetrics / Prometheus exposition format.</td>
+            </tr>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/api/system/snapshot</code></td>
+              <td>Latest host telemetry, PSI pressure, and container state.</td>
+            </tr>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/api/models/catalog</code></td>
+              <td>Complete open-source AI model catalog metadata.</td>
+            </tr>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/api/models/recommendations</code></td>
+              <td>Hardware-assessed model fit tiers, throughput, and headroom.</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td><code>/api/models/deploy</code></td>
+              <td>1-click model deployment (Docker or Kubernetes).</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td><code>/api/models/benchmark</code></td>
+              <td>Execute empirical inference benchmark.</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td><code>/api/models/optimize</code></td>
+              <td>Dynamic VRAM reclamation and idle model eviction.</td>
+            </tr>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/api/models/cluster-capacity</code></td>
+              <td>Fleet-wide AI model capacity and node placements.</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td><code>/api/cluster/nodes/register</code></td>
+              <td>Register a worker node in the cluster mesh.</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td><code>/api/cluster/nodes/{id}/heartbeat</code></td>
+              <td>Record telemetry heartbeat from worker node agent.</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td><code>/api/canary/rollouts/{id}/step</code></td>
+              <td>Advance canary traffic step with health evaluation.</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td><code>/api/canary/rollouts/{id}/rollback</code></td>
+              <td>Trigger automated canary rollback.</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td><code>/api/policy/emergency_stop</code></td>
+              <td>Toggle global emergency stop.</td>
+            </tr>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/api/audit</code></td>
+              <td>Query immutable decision audit log.</td>
+            </tr>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/api/events/stream</code></td>
+              <td>Server-Sent Events (SSE) real-time platform event feed.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Section: Troubleshooting -->
+      <section id="troubleshooting">
+        <h2>Production Operations &amp; Troubleshooting FAQ</h2>
+
+        <h3>Q: What happens if the host has no NVIDIA GPU?</h3>
+        <p>Aegis automatically detects GPU absence and marks GPU metrics as <code>UNAVAILABLE</code>. The Model Recommender automatically switches to CPU RAM mode, recommending lightweight models (e.g. Qwen 2.5 Coder 1.5B or Nomic Embed) and warning that larger models are incompatible, without fabricating false telemetry.</p>
+
+        <h3>Q: Can Aegis run without internet connectivity?</h3>
+        <p>Yes. Routine telemetry collection, deterministic Thermal/Resource guardians, local Docker orchestration, Tier-1/Tier-3 incident diagnosis, and local model deployment function 100% offline.</p>
+
+        <h3>Q: How do I rotate or revoke an API key?</h3>
+        <p>Generate a new token using <code>aegis keys create --name new-key</code> and delete the old key using the REST API <code>DELETE /api/security/keys/{key_id}</code>.</p>
+      </section>
+
+    </article>
+  </main>
+
+  <!-- Right Table-of-Contents Sidebar -->
+  <aside class="docs-toc">
+    <div class="toc-title">On This Page</div>
+    <ul class="toc-list" id="tocList">
+      <li class="toc-item"><a href="#intro">Overview</a></li>
+      <li class="toc-item"><a href="#quickstart">5-Min Quickstart</a></li>
+      <li class="toc-item"><a href="#installation">Installation</a></li>
+      <li class="toc-item"><a href="#client-server">Client &amp; Server</a></li>
+      <li class="toc-item"><a href="#architecture">Architecture</a></li>
+      <li class="toc-item"><a href="#safety-guardrails">Safety Guardians</a></li>
+      <li class="toc-item"><a href="#diagnosis-plane">3-Tier Diagnosis</a></li>
+      <li class="toc-item"><a href="#devin-protocol">Devin Protocol</a></li>
+      <li class="toc-item"><a href="#ten-principles">10 Principles</a></li>
+      <li class="toc-item"><a href="#cluster-mesh">Cluster Mesh</a></li>
+      <li class="toc-item"><a href="#model-recommender">Model Hub &amp; Tiers</a></li>
+      <li class="toc-item"><a href="#one-click-deploy">1-Click Deployer</a></li>
+      <li class="toc-item"><a href="#model-benchmarking">Benchmarking</a></li>
+      <li class="toc-item"><a href="#memory-optimizer">VRAM Optimizer</a></li>
+      <li class="toc-item"><a href="#self-healing">Self-Healing</a></li>
+      <li class="toc-item"><a href="#canary-rollouts">Canary Rollouts</a></li>
+      <li class="toc-item"><a href="#security-rbac">Security &amp; RBAC</a></li>
+      <li class="toc-item"><a href="#cli-reference">CLI Reference</a></li>
+      <li class="toc-item"><a href="#api-reference">API Reference</a></li>
+      <li class="toc-item"><a href="#troubleshooting">Troubleshooting FAQ</a></li>
+    </ul>
+  </aside>
+</div>
+
+<!-- Search Modal Overlay -->
+<div class="search-modal-overlay" id="searchModal" style="display:none;">
+  <div class="search-modal">
+    <div class="search-input-wrap">
+      <span class="search-icon">🔍</span>
+      <input type="text" class="search-input" id="docsSearchInput" placeholder="Search documentation, commands, APIs, concepts..." autofocus>
+      <span class="search-shortcut">ESC</span>
+    </div>
+    <div class="search-results" id="searchResultsList">
+      <div style="padding:16px 18px; color:var(--muted); font-size:0.86rem;">Type a keyword to search across all guides and APIs...</div>
+    </div>
+    <div class="search-footer">
+      <span>Navigation: <strong>↑</strong> <strong>↓</strong> to select · <strong>ENTER</strong> to jump</span>
+      <span>Aegis AI Documentation Portal</span>
+    </div>
+  </div>
+</div>
+
+<script src="/static/docs.js"></script>
+</body>
+</html>

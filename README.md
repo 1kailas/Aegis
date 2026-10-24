@@ -2,7 +2,7 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Version: 3.1.0](https://img.shields.io/badge/version-3.1.0-blue.svg)]()
-[![Tests Passing](https://img.shields.io/badge/tests-68%2F68%20passed-brightgreen.svg)]()
+[![Tests Passing](https://img.shields.io/badge/tests-69%2F69%20passed-brightgreen.svg)]()
 [![Prometheus Ready](https://img.shields.io/badge/prometheus-%2Fmetrics-orange.svg)]()
 [![Security: Hardened](https://img.shields.io/badge/security-hardened-blue.svg)](SECURITY.md)
 [![Agents: Devin Protocol](https://img.shields.io/badge/agents-Devin%20protocol-purple.svg)](AGENTS.md)
@@ -466,6 +466,6 @@ PYTHONPATH=. .venv/bin/pytest tests/ -v
 - **`tests/test_v20.py` (5 tests)**: Distributed cluster mesh node lifecycle and draining, automated canary verification and closed-loop rollbacks, multi-channel webhook alert storm debouncing, cryptographic RBAC token generation & permission enforcement, and v2.0 API routes.
 - **`tests/test_client_and_cli.py` (7 tests)**: Aegis Agent host telemetry & capacity sampling, cluster mesh registration and authenticated heartbeats, graceful node draining on shutdown, unified `aegis` CLI subcommands (`status`, `nodes`, `incidents`, `canary`, `keys`, `mode`, `estop`, `join`), `normalize_server_url` IP parsing, and server distribution endpoints (`/agent.py`, `/install.sh`, `/api/cluster/join-info`).
 - **`tests/test_v30.py` (5 tests)**: AI model intelligence recommender (hardware profiling, fit tiers across 24GB GPU, 8GB GPU, and CPU-only hosts, task filtering, token throughput estimation), one-click Docker and Kubernetes deployer, manifest generation with GPU requests & readiness probes, persistent deployment lifecycle, and developer CLI `aegis models` commands.
-- **`tests/test_v31.py` (5 tests)**: Real-time AI model benchmarker (live and physical bandwidth simulation TTFT & tokens/sec), benchmark database persistence, dynamic VRAM optimization & idle model eviction, fleet-wide AI capacity planning, and closed-loop self-healing automated incident recovery verification.
+- **`tests/test_v31.py` (6 tests)**: Real-time AI model benchmarker (live and physical bandwidth simulation TTFT & tokens/sec), benchmark database persistence, dynamic VRAM optimization & idle model eviction, fleet-wide AI capacity planning, closed-loop self-healing automated incident recovery verification, and complete documentation website delivery (`/documentation`, `/guide`, `/manual`).
 
-**Result: 68 passed in ~11.2 seconds.**
+**Result: 69 passed in ~12.0 seconds.**

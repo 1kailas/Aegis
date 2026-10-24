@@ -199,3 +199,36 @@ def test_v31_cli_benchmark_and_optimize(app_ctx: AppContext):
     args_opt = argparse.Namespace(models_action="optimize")
     ret_opt = cmd_models(client, args_opt)
     assert ret_opt == 0
+
+
+def test_v31_documentation_portal_endpoints(app_ctx: AppContext):
+    """Verify production documentation website delivery, guide aliases, and static assets."""
+    app = create_app(app_ctx)
+    client = TestClient(app)
+
+    # 1. /documentation serves the complete A-Z HTML docs
+    r_doc = client.get("/documentation")
+    assert r_doc.status_code == 200
+    assert "Aegis AI Docs" in r_doc.text
+    assert "Dual-Plane Safety Architecture" in r_doc.text
+    assert "REST API Specification" in r_doc.text
+    assert "Distributed Cluster Mesh" in r_doc.text
+
+    # 2. /guide and /manual aliases
+    assert client.get("/guide").status_code == 200
+    assert client.get("/manual").status_code == 200
+
+    # 3. Static documentation CSS & JS
+    r_css = client.get("/static/docs.css")
+    assert r_css.status_code == 200
+    assert "--primary" in r_css.text
+
+    r_js = client.get("/static/docs.js")
+    assert r_js.status_code == 200
+    assert "setupSearchEngine" in r_js.text
+
+    # 4. Standard /docs redirect
+    r_redirect = client.get("/docs", follow_redirects=False)
+    assert r_redirect.status_code in (301, 302, 307)
+    assert r_redirect.headers["location"] == "/api/docs"
+
