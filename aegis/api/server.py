@@ -246,6 +246,112 @@ def create_app(ctx: AppContext) -> FastAPI:
     def incidents(state: str | None = None, limit: int = 25) -> list[dict[str, Any]]:
         return ctx.incidents.list(state=state, limit=min(limit, 200))
 
+    @app.post("/api/incidents/{incident_id}/diagnose")
+    def incident_diagnose(incident_id: str) -> dict[str, Any]:
+        inc = ctx.incidents.get(incident_id)
+        if not inc:
+            raise HTTPException(status_code=404, detail="Incident not found")
+        history = ctx.metrics.history(10)
+        latest_telemetry = history[-1][1] if history else None
+        diag = ctx.diagnoser.diagnose(inc, latest_telemetry)
+        ctx.incidents.append_evidence(incident_id, {"kind": "ai_diagnosis", "detail": diag.as_dict()})
+        ctx.events.emit(
+            "diagnosis",
+            f"Diagnosis complete for {incident_id} via {diag.provider}: {diag.root_cause_hypothesis}",
+            "info",
+            incident_id=incident_id,
+            provider=diag.provider,
+        )
+        return diag.as_dict()
+
+    # ------------------------------------------------------------- Devin Engineering
+    @app.get("/api/devin/status")
+    def devin_status() -> dict[str, Any]:
+        return ctx.devin.status()
+
+    @app.get("/api/devin/tasks")
+    def devin_tasks(limit: int = 50) -> list[dict[str, Any]]:
+        return ctx.devin.list_tasks(limit=limit)
+
+    @app.post("/api/devin/tasks", dependencies=[Depends(_auth_dp(ctx))])
+    def devin_create_task(payload: dict[str, Any]) -> dict[str, Any]:
+        incident_id = payload.get("incident_id")
+        if not incident_id:
+            raise HTTPException(status_code=422, detail="incident_id required")
+        inc = ctx.incidents.get(incident_id)
+        if not inc:
+            raise HTTPException(status_code=404, detail="Incident not found")
+        task = ctx.devin.create_repair_task(
+            incident=inc,
+            affected_repo=payload.get("affected_repo", "https://github.com/1kailas/Aegis.git"),
+            affected_files=payload.get("affected_files"),
+            reproduction_steps=payload.get("reproduction_steps"),
+            acceptance_criteria=payload.get("acceptance_criteria"),
+            sanitized_logs=payload.get("sanitized_logs", ""),
+        )
+        return task.as_dict()
+
+    @app.post("/api/devin/tasks/{task_id}/dispatch", dependencies=[Depends(_auth_dp(ctx))])
+    def devin_dispatch(task_id: str) -> dict[str, Any]:
+        job = ctx.db.query_one("SELECT * FROM jobs WHERE id=?", (task_id,))
+        if not job:
+            raise HTTPException(status_code=404, detail="Task not found")
+        task_data = json.loads(job["payload"]) if job["payload"] else {}
+        from aegis.engineering.devin_adapter import RepairTask
+        task = RepairTask(
+            task_id=task_id,
+            incident_id=task_data.get("incident_id", ""),
+            title=task_data.get("title", ""),
+            summary=task_data.get("summary", ""),
+            root_cause_hypotheses=task_data.get("root_cause_hypotheses", []),
+            affected_repo=task_data.get("affected_repo", ""),
+            affected_revision=task_data.get("affected_revision"),
+            affected_files=task_data.get("affected_files", []),
+            reproduction_steps=task_data.get("reproduction_steps", []),
+            acceptance_criteria=task_data.get("acceptance_criteria", []),
+            allowed_scope=task_data.get("allowed_scope", []),
+            prohibited_operations=task_data.get("prohibited_operations", []),
+            sanitized_logs=task_data.get("sanitized_logs", ""),
+        )
+        return ctx.devin.dispatch_task(task)
+
+    # -------------------------------------------------------- Remediation Policy Engine
+    @app.post("/api/remediation/evaluate")
+    def remediation_evaluate(payload: dict[str, Any]) -> dict[str, Any]:
+        action = ctx.remediation.evaluate_proposal(
+            action_type=payload.get("action_type", ""),
+            target=payload.get("target", ""),
+            reason=payload.get("reason", ""),
+            evidence=payload.get("evidence"),
+            expected_outcome=payload.get("expected_outcome", ""),
+        )
+        return {
+            "action_type": action.action_type,
+            "target": action.target,
+            "risk_level": action.risk_level.value,
+            "category": action.category.value,
+            "preconditions": action.preconditions,
+            "rollback_strategy": action.rollback_strategy,
+            "verification_procedure": action.verification_procedure,
+        }
+
+    @app.post("/api/remediation/authorize", dependencies=[Depends(_auth_dp(ctx))])
+    def remediation_authorize(payload: dict[str, Any]) -> dict[str, Any]:
+        action = ctx.remediation.evaluate_proposal(
+            action_type=payload.get("action_type", ""),
+            target=payload.get("target", ""),
+            reason=payload.get("reason", ""),
+            evidence=payload.get("evidence"),
+        )
+        approved = bool(payload.get("operator_approved", False))
+        result = ctx.remediation.authorize_and_execute(
+            action=action,
+            mode=ctx.flags.mode,
+            emergency_stop=ctx.flags.emergency_stop,
+            operator_approved=approved,
+        )
+        return result
+
     @app.get("/api/actions")
     def actions(limit: int = 25) -> list[dict[str, Any]]:
         rows = ctx.db.query(

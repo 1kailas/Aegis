@@ -22,9 +22,12 @@ from aegis.collectors.sensor_registry import SensorRegistry
 from aegis.collectors.storage import StorageCollector
 from aegis.collectors.system_metrics import MetricsCollector
 from aegis.config import AppConfig
+from aegis.control_plane.action_policy import RemediationPolicyEngine
 from aegis.control_plane.policy import PolicyExecutor
 from aegis.control_plane.resource_guardian import ResourceGuardian, ResourcePolicy
 from aegis.control_plane.thermal_guardian import ThermalGuardian
+from aegis.engineering.devin_adapter import DevinAdapter
+from aegis.intelligence.diagnosis import IncidentDiagnoser
 from aegis.orchestration.ai_workloads import AIWorkloadMonitor
 from aegis.orchestration.dependency_graph import DependencyGraph
 from aegis.orchestration.docker_adapter import DockerAdapter
@@ -125,6 +128,14 @@ class AppContext:
         self.ai_workloads = AIWorkloadMonitor(ollama_url=config.models.ollama_url)
         self.graph = DependencyGraph()
         self.incidents = IncidentStore(self.db)
+        self.diagnoser = IncidentDiagnoser(
+            ollama_url=config.models.ollama_url,
+            local_model=config.models.investigator,
+            gemini_api_key=config.gemini_api_key,
+            gemini_model=config.models.gemini_model,
+        )
+        self.devin = DevinAdapter(self.db)
+        self.remediation = RemediationPolicyEngine(self.db, self.events)
 
         self.flags = RuntimeFlags(config, self.db)
         self.guardian = ThermalGuardian(
@@ -273,6 +284,7 @@ class AppContext:
             "docker": self.docker.sample(),
             "kubernetes": self.k8s.sample(),
             "ai_workloads": self.ai_workloads.sample(),
+            "devin": self.devin.status(),
             "events": [e.__dict__ for e in self.events.latest(10)],
             "overrides_enabled": self.config.monitoring.simulated_overrides_enabled,
             "active_overrides": {
