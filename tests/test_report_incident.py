@@ -66,3 +66,37 @@ def test_report_incident_endpoint(app_ctx: AppContext):
         assert inc["severity"] == "critical"
         assert "Webliz Cloud Store" in inc["title"]
         assert any(e.get("kind") == "target_exception" for e in inc["evidence"])
+
+
+def test_api_enabled_toggle_and_report_bypass(app_ctx: AppContext):
+    """Verify the API switch disables external AI calls when turned off."""
+    app = create_app(app_ctx)
+    client = TestClient(app)
+
+    # 1. Check default is enabled
+    res = client.get("/api/policy/api-enabled")
+    assert res.status_code == 200
+    assert res.json()["enabled"] is True
+
+    # 2. Toggle to disabled
+    res_off = client.post("/api/policy/api-enabled", json={"enabled": False})
+    assert res_off.status_code == 200
+    assert res_off.json()["enabled"] is False
+
+    # 3. Report incident while disabled — should NOT dispatch external AI
+    payload = {
+        "app_name": "Webliz Cloud Store",
+        "error": "ZeroDivisionError: division by zero",
+        "traceback": "traceback lines...",
+        "affected_file": "demo-target/app.py",
+    }
+    rep_res = client.post("/api/incidents/report", json=payload)
+    assert rep_res.status_code == 200
+    data = rep_res.json()
+    assert data["dispatch"]["status"] == "API_DISABLED"
+    assert data["task_id"] is None
+    assert data["pull_request_url"] is None
+
+    # 4. Re-enable switch
+    res_on = client.post("/api/policy/api-enabled", json={"enabled": True})
+    assert res_on.json()["enabled"] is True

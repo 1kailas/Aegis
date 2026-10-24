@@ -70,6 +70,7 @@ class RuntimeFlags:
         self._lock = threading.Lock()
         self._mode = db.get_state("mode", config.monitoring.mode)
         self._emergency_stop = db.get_state("emergency_stop", "false") == "true"
+        self._api_enabled = db.get_state("api_enabled", "true") == "true"
         self._sampling_boosted = False
         self.backpressure = False
         self.active_incident_id: str | None = None
@@ -94,6 +95,15 @@ class RuntimeFlags:
     def set_emergency_stop(self, value: bool) -> None:
         with self._lock:
             self._emergency_stop = bool(value)
+
+    @property
+    def api_enabled(self) -> bool:
+        with self._lock:
+            return self._api_enabled
+
+    def set_api_enabled(self, value: bool) -> None:
+        with self._lock:
+            self._api_enabled = bool(value)
 
     @property
     def sampling_boosted(self) -> bool:
@@ -320,6 +330,7 @@ class AppContext:
             "engine_running": bool(self.engine and self.engine.alive),
             "mode": self.flags.mode,
             "emergency_stop": self.flags.emergency_stop,
+            "api_enabled": self.flags.api_enabled,
             "sampling_boosted": self.flags.sampling_boosted,
             "collect_interval": self.flags.active_interval_s,
             "db": {

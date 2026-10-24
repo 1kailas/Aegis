@@ -449,6 +449,22 @@ def create_app(ctx: AppContext) -> FastAPI:
             incident_id=inc["id"],
         )
 
+        if not getattr(ctx.flags, "api_enabled", True):
+            return {
+                "success": True,
+                "incident_id": inc["id"],
+                "task_id": None,
+                "state": inc["state"],
+                "dispatch": {
+                    "status": "API_DISABLED",
+                    "engine": "none",
+                    "message": "AI API dispatch is currently disabled via operator switch.",
+                },
+                "pull_request_url": None,
+                "patch": None,
+                "message": f"Incident {inc['id']} opened. AI API dispatch paused (Operator Switch: OFF).",
+            }
+
         task = ctx.devin.create_repair_task(
             inc,
             affected_repo=payload.get("repo_url", "https://github.com/1kailas/Aegis"),
@@ -1827,6 +1843,21 @@ def create_app(ctx: AppContext) -> FastAPI:
     def set_estop(req: EmergencyStopRequest) -> dict[str, Any]:
         ctx.set_emergency_stop(req.enabled)
         return {"emergency_stop": ctx.flags.emergency_stop}
+
+    @app.get("/api/policy/api-enabled")
+    def get_api_enabled() -> dict[str, Any]:
+        return {"enabled": getattr(ctx.flags, "api_enabled", True)}
+
+    @app.post("/api/policy/api-enabled")
+    def set_api_enabled(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+        enabled = bool(payload.get("enabled", True))
+        ctx.flags.set_api_enabled(enabled)
+        ctx.events.emit(
+            "policy",
+            f"Autonomous AI API dispatch has been {'ENABLED' if enabled else 'DISABLED by operator'}",
+            "info" if enabled else "warn",
+        )
+        return {"enabled": ctx.flags.api_enabled}
 
     @app.get("/api/demo")
     def demo_status() -> dict[str, Any]:

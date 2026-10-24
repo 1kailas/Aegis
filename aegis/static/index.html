@@ -41,6 +41,16 @@
       <span id="systemStatusText" style="font-size:12px; font-weight:500;">All Systems Operational</span>
     </div>
 
+    <!-- Switch to Disable API -->
+    <div class="api-switch-wrap" title="Toggle external AI API calls for autonomous PR generation">
+      <span class="api-switch-label" id="apiSwitchLabel">AI Engine Active</span>
+      <label class="switch">
+        <input type="checkbox" id="apiToggleSwitch" checked>
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <button class="btn sm warn" id="btnTriggerTargetBug" title="Simulates a 500 error on demo target">💥 Simulate 500</button>
     <a href="http://127.0.0.1:5050" target="_blank" class="btn sm ok" style="text-decoration:none;">Demo Store (5050) ↗</a>
 
     <!-- Hidden compatibility elements for background scripts -->

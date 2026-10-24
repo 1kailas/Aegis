@@ -2580,7 +2580,46 @@ async function updateDualModelsStatus() {
   } catch (e) {}
 }
 
+// ------------------------------------------------------------- AI API Switch Toggle
+async function initApiSwitch() {
+  const tgl = $("apiToggleSwitch");
+  const lbl = $("apiSwitchLabel");
+  if (!tgl) return;
+
+  try {
+    const res = await (await fetch("/api/policy/api-enabled")).json();
+    tgl.checked = res.enabled !== false;
+    updateSwitchUi(tgl.checked);
+  } catch (e) {}
+
+  tgl.addEventListener("change", async () => {
+    const enabled = tgl.checked;
+    updateSwitchUi(enabled);
+    try {
+      await fetch("/api/policy/api-enabled", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      showToast(
+        enabled ? "Autonomous AI Engine Active" : "AI API Disabled — External LLM/PR calls paused",
+        enabled ? "ok" : "warn"
+      );
+    } catch (e) {
+      showToast(`Error updating API toggle: ${e}`, "crit");
+    }
+  });
+
+  function updateSwitchUi(enabled) {
+    if (lbl) {
+      lbl.textContent = enabled ? "AI Engine Active" : "AI API: Paused";
+      lbl.style.color = enabled ? "#10b981" : "#94a3b8";
+    }
+  }
+}
+
 // ------------------------------------------------------------- Initialization
+initApiSwitch();
 pollOverview();
 updateDualModelsStatus();
 initKeyGraphEvents();
