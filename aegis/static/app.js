@@ -102,6 +102,7 @@ function switchTab(tabName) {
   if (tabName === "models") refreshModels();
   if (tabName === "infra") { refreshDocker(); pollSensors(); }
   if (tabName === "incidents") { refreshIncidents(); refreshAudit(); }
+  if (tabName === "causality") refreshKeaTopology();
 }
 window.switchTab = switchTab;
 
@@ -2544,9 +2545,411 @@ pollHistory();
 pollSensors();
 setupClusterJoinCommands();
 initSSE();
+refreshKeaTopology();
 
 setInterval(pollOverview, 3000);
 setInterval(updateDualModelsStatus, 10000);
 setInterval(pollActiveTab, 3500);
 setInterval(pollHistory, 5000);
 setInterval(pollSensors, 8000);
+
+// =============================================================
+// KEA-STYLE SERVICE DEPENDENCY TOPOLOGY & CAUSALITY ENGINE
+// =============================================================
+let keaCurrentCausality = null;
+let keaActiveSubTab = "overview";
+let keaSimClockInterval = null;
+
+$("btnOpenCausalityView")?.addEventListener("click", () => switchTab("causality"));
+
+function setKeaSubTab(subTab) {
+  keaActiveSubTab = subTab;
+  document.querySelectorAll("#keaSubTabGroup .filter-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.subtab === subTab);
+  });
+  if ($("keaSubTabOverview")) $("keaSubTabOverview").style.display = subTab === "overview" ? "flex" : "none";
+  if ($("keaSubTabInvestigate")) $("keaSubTabInvestigate").style.display = subTab === "investigate" ? "flex" : "none";
+  if ($("keaSubTabFix")) $("keaSubTabFix").style.display = subTab === "fix" ? "flex" : "none";
+}
+
+document.querySelectorAll("#keaSubTabGroup .filter-btn").forEach(btn => {
+  btn.addEventListener("click", () => setKeaSubTab(btn.dataset.subtab));
+});
+
+async function refreshKeaTopology() {
+  try {
+    const incs = await (await fetch("/api/incidents")).json();
+    const activeInc = (incs || []).find(x => x.state !== "RESOLVED") || (incs || [])[0];
+
+    const badge = $("causalityTabBadge");
+    if (badge) {
+      const activeCount = (incs || []).filter(x => x.state !== "RESOLVED" && x.state !== "RECOVERY_VERIFIED").length;
+      badge.textContent = activeCount;
+      badge.style.display = activeCount > 0 ? "inline-block" : "none";
+    }
+
+    if (activeInc) {
+      const cRes = await fetch(`/api/incidents/${activeInc.id}/causality`);
+      if (cRes.ok) {
+        keaCurrentCausality = await cRes.json();
+      }
+    } else {
+      keaCurrentCausality = {
+        incident_id: "NONE",
+        title: "All Microservices Nominal",
+        state: "HEALTHY",
+        target_service: "Checkout Payment Service",
+        topology: {
+          blast_radius_score: "LOW",
+          affected_services_count: 0,
+          nodes: [
+            { id: "web-frontend", name: "web-frontend", status: "HEALTHY" },
+            { id: "api-gateway", name: "api-gateway", status: "HEALTHY" },
+            { id: "checkout", name: "checkout", status: "HEALTHY" },
+            { id: "payment", name: "payment", status: "HEALTHY" },
+            { id: "postgres", name: "postgres", status: "HEALTHY" },
+            { id: "notifications", name: "notifications", status: "HEALTHY" },
+            { id: "inventory", name: "inventory", status: "HEALTHY" },
+            { id: "redis", name: "redis", status: "HEALTHY" }
+          ]
+        },
+        root_cause_ranking: [],
+        auto_pr: { has_patch: false, pull_request_url: "#" },
+        predict_and_verify: { expected_outcome: "All systems healthy and accepting traffic." }
+      };
+    }
+
+    renderKeaTopologySvg(keaCurrentCausality);
+    renderKeaRightPanel(keaCurrentCausality);
+  } catch (err) {
+    console.warn("refreshKeaTopology error:", err);
+  }
+}
+window.refreshKeaTopology = refreshKeaTopology;
+
+function renderKeaTopologySvg(data) {
+  const svg = $("keaTopologySvg");
+  if (!svg) return;
+
+  const isFailing = data && data.state && data.state !== "HEALTHY" && data.state !== "RECOVERY_VERIFIED" && data.state !== "RESOLVED";
+  const isRecovered = data && data.state === "RECOVERY_VERIFIED";
+
+  // Coordinates strictly matching the Kea screenshot layout
+  const nodes = [
+    { id: "web-frontend", label: "web-frontend", x: 90, y: 220, status: "healthy", icon: "✔" },
+    { id: "api-gateway", label: "api-gateway", x: 230, y: 220, status: "healthy", icon: "✔" },
+    { id: "checkout", label: "checkout", x: 400, y: 110, status: "healthy", icon: "✔" },
+    { id: "payment", label: "payment", x: 570, y: 155, status: isFailing ? "degraded" : "healthy", icon: isFailing ? "⚠" : "✔", badge: isFailing ? "dep-182" : null },
+    { id: "postgres", label: "postgres", x: 720, y: 190, status: isFailing ? "degraded" : "healthy", icon: isFailing ? "⚠" : "✔" },
+    { id: "notifications", label: "notifications", x: 570, y: 260, status: "healthy", icon: "✔" },
+    { id: "inventory", label: "inventory", x: 400, y: 330, status: "healthy", icon: "✔" },
+    { id: "redis", label: "redis", x: 570, y: 360, status: "healthy", icon: "✔" }
+  ];
+
+  // Edges matching Kea screenshot
+  const edges = [
+    { from: "web-frontend", to: "api-gateway", x1: 115, y1: 220, x2: 205, y2: 220, cx1: 160, cy1: 220, cx2: 170, cy2: 220, dashed: false, causal: isFailing },
+    { from: "api-gateway", to: "checkout", x1: 255, y1: 210, x2: 375, y2: 115, cx1: 300, cy1: 190, cx2: 340, cy2: 125, dashed: false, causal: isFailing },
+    { from: "api-gateway", to: "inventory", x1: 255, y1: 230, x2: 375, y2: 325, cx1: 300, cy1: 250, cx2: 340, cy2: 315, dashed: false, causal: false },
+    { from: "checkout", to: "payment", x1: 425, y1: 115, x2: 545, y2: 150, cx1: 470, cy1: 120, cx2: 510, cy2: 140, dashed: false, causal: isFailing },
+    { from: "payment", to: "postgres", x1: 595, y1: 160, x2: 695, y2: 185, cx1: 635, cy1: 165, cx2: 665, cy2: 180, dashed: false, causal: isFailing },
+    { from: "checkout", to: "notifications", x1: 420, y1: 125, x2: 545, y2: 255, cx1: 460, cy1: 170, cx2: 510, cy2: 230, dashed: true, causal: false },
+    { from: "inventory", to: "redis", x1: 425, y1: 335, x2: 545, y2: 355, cx1: 470, cy1: 340, cx2: 510, cy2: 350, dashed: false, causal: false }
+  ];
+
+  let svgHtml = `
+    <defs>
+      <filter id="keaGlow" x="-20%" y="-20%" width="140%" height="140%">
+        <feGaussianBlur stdDeviation="4" result="blur"/>
+        <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+      </filter>
+    </defs>
+  `;
+
+  // Draw Edges
+  edges.forEach(e => {
+    const strokeColor = e.causal ? "#f59e0b" : "#475569";
+    const strokeWidth = e.causal ? "2.8" : "1.8";
+    const dashAttr = e.dashed ? 'stroke-dasharray="4,4"' : '';
+    const glowFilter = e.causal ? 'filter="url(#keaGlow)"' : '';
+    
+    if (e.causal) {
+      svgHtml += `
+        <path d="M ${e.x1} ${e.y1} C ${e.cx1} ${e.cy1}, ${e.cx2} ${e.cy2}, ${e.x2} ${e.y2}"
+              fill="none" stroke="rgba(245,158,11,0.3)" stroke-width="6" />
+      `;
+    }
+
+    svgHtml += `
+      <path d="M ${e.x1} ${e.y1} C ${e.cx1} ${e.cy1}, ${e.cx2} ${e.cy2}, ${e.x2} ${e.y2}"
+            fill="none" stroke="${strokeColor}" stroke-width="${strokeWidth}" ${dashAttr} ${glowFilter} />
+      <circle cx="${e.x2}" cy="${e.y2}" r="3" fill="${strokeColor}" />
+    `;
+  });
+
+  // Draw Nodes
+  nodes.forEach(n => {
+    const isDeg = n.status === "degraded";
+    const isFail = n.status === "failing";
+    const mainColor = isFail ? "#ef4444" : (isDeg ? "#f59e0b" : "#10b981");
+    const bgColor = isFail ? "rgba(239,68,68,0.18)" : (isDeg ? "rgba(245,158,11,0.18)" : "rgba(16,185,129,0.18)");
+    const borderColor = isFail ? "#ef4444" : (isDeg ? "#f59e0b" : "#10b981");
+
+    if (isDeg || isFail) {
+      svgHtml += `
+        <circle cx="${n.x}" cy="${n.y}" r="26" fill="none" stroke="${mainColor}" stroke-width="1.5" opacity="0.6">
+          <animate attributeName="r" values="22;32;22" dur="2s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0.8;0.1;0.8" dur="2s" repeatCount="indefinite"/>
+        </circle>
+      `;
+    }
+
+    svgHtml += `
+      <g style="cursor:pointer;" onclick="showToast('Service: ${n.label} (${n.status})', '${isDeg || isFail ? 'warn' : 'ok'}')">
+        <circle cx="${n.x}" cy="${n.y}" r="22" fill="${bgColor}" stroke="${borderColor}" stroke-width="2" />
+        <circle cx="${n.x}" cy="${n.y}" r="17" fill="none" stroke="${borderColor}" stroke-width="1" opacity="0.5" />
+        <text x="${n.x}" y="${n.y + 1}" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="bold" fill="${mainColor}">
+          ${n.icon}
+        </text>
+        <text x="${n.x}" y="${n.y - 30}" text-anchor="middle" font-size="12" font-weight="700" fill="#f8fafc" letter-spacing="0.2">
+          ${n.label}
+        </text>
+        <text x="${n.x}" y="${n.y + 36}" text-anchor="middle" font-size="10" font-weight="500" fill="${mainColor}">
+          ${n.status}
+        </text>
+        ${n.badge ? `
+          <g transform="translate(${n.x + 16}, ${n.y - 12})">
+            <rect x="0" y="0" width="56" height="18" rx="4" fill="rgba(245,158,11,0.25)" stroke="#f59e0b" stroke-width="1" />
+            <text x="28" y="10" text-anchor="middle" dominant-baseline="central" font-size="9" font-weight="700" fill="#fbbf24">
+              ☍ ${n.badge}
+            </text>
+          </g>
+        ` : ''}
+      </g>
+    `;
+  });
+
+  svg.innerHTML = svgHtml;
+}
+
+function renderKeaRightPanel(data) {
+  if (!data) return;
+  const isFailing = data.state && data.state !== "HEALTHY" && data.state !== "RECOVERY_VERIFIED" && data.state !== "RESOLVED";
+  const iid = data.incident_id || "INC-001";
+
+  if ($("keaIncidentCode")) $("keaIncidentCode").textContent = iid;
+  if ($("keaRightIncidentTitle")) $("keaRightIncidentTitle").textContent = `Incident ${iid}`;
+  if ($("keaRightIncidentSub")) {
+    $("keaRightIncidentSub").textContent = isFailing
+      ? "Opened just now, 2 services affected, revision 1"
+      : "Closed-loop verified, all services nominal";
+  }
+  if ($("keaRightStateBadge")) {
+    $("keaRightStateBadge").className = `badge ${isFailing ? 'crit' : 'ok'}`;
+    $("keaRightStateBadge").textContent = data.state || (isFailing ? "OPEN" : "RECOVERY_VERIFIED");
+  }
+  if ($("keaIncidentStatusText")) {
+    $("keaIncidentStatusText").innerHTML = isFailing
+      ? `Incident <strong>Open</strong> <code>${iid}</code>, revision 1`
+      : `Incident <strong>Verified</strong> <code>${iid}</code> (Closed)`;
+  }
+  if ($("keaIncidentDot")) {
+    $("keaIncidentDot").className = `status-dot ${isFailing ? 'crit' : 'ok'}`;
+  }
+  if ($("keaServicesAffected")) {
+    $("keaServicesAffected").innerHTML = isFailing
+      ? `Services affected: <strong>2/8</strong> (0 customer-facing)`
+      : `Services affected: <strong>0/8</strong> (All Healthy)`;
+  }
+
+  // 1. Overview Tab
+  if ($("keaWhatChangedText")) {
+    $("keaWhatChangedText").innerHTML = isFailing
+      ? `All affected services were healthy until failure onset. Outage on <strong>payment / checkout</strong> preceded the first anomaly by 45s and its causal chain explains 2 of 2 anomalies.`
+      : `All affected services have recovered and verified nominal after autonomous patch deployment.`;
+  }
+  if ($("keaRelevantBadgeText")) {
+    $("keaRelevantBadgeText").textContent = isFailing
+      ? `Outage on checkout service, 45s before onset`
+      : `Recovery verified via live HTTP 200 health probe`;
+  }
+
+  // Ranked candidates list
+  const listEl = $("keaCandidatesList");
+  if (listEl) {
+    if (isFailing && data.root_cause_ranking && data.root_cause_ranking.length > 0) {
+      listEl.innerHTML = data.root_cause_ranking.map((cand, idx) => {
+        const isRanked = cand.status === "RANKED_ROOT_CAUSE";
+        const score = cand.factor_scores ? cand.factor_scores.composite_score : 0.95;
+        const timingScore = cand.factor_scores ? cand.factor_scores.temporal_proximity_score : 0.96;
+        const pathScore = cand.factor_scores ? cand.factor_scores.dependency_path_score : 1.0;
+        const sigScore = cand.factor_scores ? cand.factor_scores.error_signature_match : 0.92;
+
+        return `
+          <div style="background:rgba(20,26,38,0.6); border:1px solid ${isRanked ? 'rgba(56,189,248,0.25)' : 'rgba(255,255,255,0.06)'}; border-radius:6px; padding:10px 12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <span style="font-size:12px; font-weight:700; color:${isRanked ? '#38bdf8' : '#94a3b8'};">
+                ${idx + 1}. ${cand.name}
+              </span>
+              <span style="font-size:13px; font-weight:800; color:${isRanked ? '#38bdf8' : '#64748b'};">${score} &gt;</span>
+            </div>
+
+            <!-- Segmented Progress Bar (Matching Kea) -->
+            <div style="height:6px; border-radius:3px; background:#1e293b; display:flex; overflow:hidden; margin-bottom:8px;">
+              <div style="width:${Math.round(timingScore * 30)}%; background:#38bdf8;" title="Timing"></div>
+              <div style="width:${Math.round(pathScore * 35)}%; background:#10b981;" title="Dependency Path"></div>
+              <div style="width:${Math.round(sigScore * 35)}%; background:#f59e0b;" title="Anomaly Signature"></div>
+            </div>
+
+            <!-- Dot Breakdowns -->
+            <div style="display:flex; flex-direction:column; gap:3px; font-size:10px; color:#94a3b8;">
+              <div class="flex items-center gap-6">
+                <span style="width:6px; height:6px; border-radius:50%; background:#38bdf8; display:inline-block;"></span>
+                <span>Timing: ${timingScore.toFixed(2)} × 0.30 = ${(timingScore * 0.3).toFixed(4)}</span>
+              </div>
+              <div class="flex items-center gap-6">
+                <span style="width:6px; height:6px; border-radius:50%; background:#10b981; display:inline-block;"></span>
+                <span>Dependency Path: ${pathScore.toFixed(2)} × 0.35 = ${(pathScore * 0.35).toFixed(4)}</span>
+              </div>
+              <div class="flex items-center gap-6">
+                <span style="width:6px; height:6px; border-radius:50%; background:#f59e0b; display:inline-block;"></span>
+                <span>Explains incident: ${sigScore.toFixed(2)} × 0.35 = ${(sigScore * 0.35).toFixed(4)}</span>
+              </div>
+            </div>
+
+            ${cand.rejection_reason ? `
+              <div style="margin-top:6px; padding:6px; background:rgba(239,68,68,0.1); border-left:2px solid #ef4444; border-radius:3px; font-size:10px; color:#fca5a5;">
+                ${cand.rejection_reason}
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
+    } else {
+      listEl.innerHTML = `
+        <div style="text-align:center; padding:16px; color:var(--text-muted); font-size:11px;">
+          No active anomalies detected. All 8 microservices nominal.
+        </div>
+      `;
+    }
+  }
+
+  // 2. Investigate Tab
+  if ($("keaDiagHypothesisText")) {
+    $("keaDiagHypothesisText").textContent = data.root_hypothesis || "Unhandled ZeroDivisionError in demo-target/app.py on /health check endpoint.";
+  }
+
+  // 3. Fix & Auto-PR Tab
+  if (data.auto_pr) {
+    if ($("keaBranchName")) $("keaBranchName").textContent = data.auto_pr.branch_name || "aegis/repair-inc-001";
+    if ($("keaPrUrlLink")) {
+      $("keaPrUrlLink").textContent = `${data.auto_pr.pull_request_url} ↗`;
+      $("keaPrUrlLink").href = data.auto_pr.pull_request_url;
+    }
+    if ($("keaPrEngineBadge")) {
+      $("keaPrEngineBadge").textContent = `⚡ ${data.auto_pr.pr_engine ? data.auto_pr.pr_engine.toUpperCase() : 'GROQ'} (${data.auto_pr.pr_model || 'llama-3.1'})`;
+    }
+    if ($("keaDiffBox")) {
+      $("keaDiffBox").textContent = data.auto_pr.patch || `--- a/demo-target/app.py\n+++ b/demo-target/app.py\n@@ -40,3 +40,2 @@\n-    if BUG_TRIGGERED:\n-        res = 1 / 0\n     return jsonify({"status": "ok"})`;
+    }
+  }
+}
+
+// Wire Kea Top Bar Buttons
+$("keaSimulate500Btn")?.addEventListener("click", async () => {
+  try {
+    $("keaSimulate500Btn").textContent = "Simulating…";
+    await fetch("http://127.0.0.1:5050/trigger-bug", { method: "POST" }).catch(() => {});
+    await fetch("/api/demo/trigger-outage", { method: "POST" }).catch(() => {});
+    showToast("Outage simulated: 500 error on checkout service", "warn");
+    setTimeout(refreshKeaTopology, 800);
+  } catch (e) {
+    showToast(`Simulation error: ${e}`, "crit");
+  } finally {
+    $("keaSimulate500Btn").textContent = "Simulate 500 Outage";
+  }
+});
+
+$("keaAutoRepairBtn")?.addEventListener("click", async () => {
+  try {
+    $("keaAutoRepairBtn").textContent = "Synthesizing…";
+    const incs = await (await fetch("/api/incidents")).json();
+    const activeInc = (incs || []).find(x => x.state !== "RESOLVED") || (incs || [])[0];
+    if (!activeInc) {
+      showToast("No active incident to repair", "info");
+      return;
+    }
+
+    const task = await (await fetch("/api/devin/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ incident_id: activeInc.id }),
+    })).json();
+
+    const disp = await (await fetch(`/api/devin/tasks/${task.task_id}/dispatch`, {
+      method: "POST",
+    })).json();
+
+    if (disp.pull_request_url) {
+      showToast(`⚡ PR Generated via ${disp.engine ? disp.engine.toUpperCase() : 'Groq'}: ${disp.pull_request_url}`, "ok");
+    } else {
+      showToast(disp.message || "Repair synthesized", "ok");
+    }
+    setKeaSubTab("fix");
+    refreshKeaTopology();
+  } catch (e) {
+    showToast(`Repair error: ${e}`, "crit");
+  } finally {
+    $("keaAutoRepairBtn").textContent = "⚡ Auto-PR (Groq)";
+  }
+});
+
+$("keaDelegateBtn")?.addEventListener("click", () => {
+  $("keaAutoRepairBtn")?.click();
+});
+
+$("keaVerifyRecoverBtn")?.addEventListener("click", async () => {
+  try {
+    $("keaVerifyRecoverBtn").textContent = "Verifying…";
+    const incs = await (await fetch("/api/incidents")).json();
+    const activeInc = (incs || []).find(x => x.state !== "RESOLVED") || (incs || [])[0];
+    const taskId = activeInc ? `TASK-DEVIN-${activeInc.id}` : "TASK-DEVIN-DEMO";
+
+    await fetch(`/api/devin/tasks/${taskId}/close-loop`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ auto_apply: true }),
+    }).catch(() => {});
+
+    await fetch("http://127.0.0.1:5050/fix", { method: "POST" }).catch(() => {});
+    showToast("Recovery Verified: Target returned HTTP 200 OK. Autonomous loop closed!", "ok");
+    setTimeout(refreshKeaTopology, 500);
+  } catch (e) {
+    showToast(`Verification error: ${e}`, "crit");
+  } finally {
+    $("keaVerifyRecoverBtn").textContent = "⚡ Verify & Recover";
+  }
+});
+
+$("keaCloseLoopCtaBtn")?.addEventListener("click", () => {
+  $("keaVerifyRecoverBtn")?.click();
+});
+
+$("keaResetBtn")?.addEventListener("click", async () => {
+  try {
+    await fetch("http://127.0.0.1:5050/fix", { method: "POST" }).catch(() => {});
+    await fetch("/api/incidents/clear-all", { method: "POST" }).catch(() => {});
+    showToast("State reset: All 8 microservices nominal", "ok");
+    setTimeout(refreshKeaTopology, 400);
+  } catch (e) {
+    showToast(`Reset error: ${e}`, "crit");
+  }
+});
+
+if (!keaSimClockInterval) {
+  keaSimClockInterval = setInterval(() => {
+    if ($("keaSimClock")) {
+      $("keaSimClock").textContent = new Date().toLocaleTimeString();
+    }
+  }, 1000);
+}

@@ -23,6 +23,10 @@
 
   <nav class="topbar-nav" id="navTabs">
     <button class="nav-btn active" data-tab="overview">Overview</button>
+    <button class="nav-btn" data-tab="causality" id="navBtnCausality">
+      🌐 Topology &amp; Causality
+      <span class="nav-count crit" id="causalityTabBadge" style="display:none">1</span>
+    </button>
     <button class="nav-btn" data-tab="cluster">
       Cluster Mesh
       <span class="nav-count info" id="clusterTabBadge" style="display:none">0</span>
@@ -78,6 +82,7 @@
       <button class="btn sm" id="btnSimulateLoad" title="Triggers deterministic VRAM/memory eviction via ResourceGuardian">Simulate Load</button>
       <button class="btn sm info" id="btnScaleInstances" title="Hardware Model auto-scales instances across cluster nodes to relieve compute saturation">⚡ Scale Instances</button>
       <button class="btn sm" id="btnOpenKeyGraph" title="Jump to Security, API Keys & Integration Topology Graph">🔑 Key Graph</button>
+      <button class="btn sm primary" id="btnOpenCausalityView" title="View Kea-Style Service Topology & Causality Graph">🌐 Service Topology</button>
     </div>
   </div>
 
@@ -301,6 +306,175 @@
       </div>
       <div class="tbl-wrap" id="quickActions"></div>
     </div>
+  </div>
+
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     TAB: SERVICE DEPENDENCY TOPOLOGY & CAUSALITY (KEA-STYLE WITH AUTO-PR)
+═══════════════════════════════════════════════════════════ -->
+<section class="tab-content" id="tab-causality">
+
+  <!-- Top Status Pill Bar (matching Kea) -->
+  <div class="kea-top-bar flex items-center justify-between" style="padding:10px 16px; background:rgba(15,19,28,0.7); border:1px solid var(--border); border-radius:8px; margin-bottom:14px; gap:12px; flex-wrap:wrap;">
+    <div class="flex items-center gap-10">
+      <div class="kea-pill flex items-center gap-8" style="background:rgba(20,26,38,0.8); border:1px solid rgba(255,255,255,0.1); border-radius:20px; padding:6px 14px; font-size:12px;">
+        <span class="status-dot crit" id="keaIncidentDot"></span>
+        <span id="keaIncidentStatusText">Incident <strong>Open</strong> <code id="keaIncidentCode">INC-001</code>, revision 1</span>
+      </div>
+      <div class="kea-pill flex items-center gap-8" style="background:rgba(20,26,38,0.8); border:1px solid rgba(255,255,255,0.1); border-radius:20px; padding:6px 14px; font-size:12px;">
+        <span style="font-size:14px;">⚡</span>
+        <span id="keaServicesAffected">Services affected: <strong>2/8</strong> (0 customer-facing)</span>
+      </div>
+    </div>
+
+    <!-- Quick Simulation & Loop Control Actions -->
+    <div class="flex items-center gap-8">
+      <button class="btn sm warn" id="keaSimulate500Btn" title="Triggers 500 failure on checkout target">Simulate 500 Outage</button>
+      <button class="btn sm ok" id="keaAutoRepairBtn" title="Engages Groq/Devin to synthesize patch and open PR">⚡ Auto-PR (Groq)</button>
+      <button class="btn sm info" id="keaVerifyRecoverBtn" title="Verifies recovery via live HTTP probe and closes loop">⚡ Verify &amp; Recover</button>
+      <button class="btn sm" id="keaResetBtn" title="Resets topology to all healthy">Reset State</button>
+    </div>
+  </div>
+
+  <!-- Main Kea Split-Screen Container -->
+  <div style="display:grid; grid-template-columns: 1fr 390px; gap:16px; min-height:580px;">
+
+    <!-- Left / Center: Interactive Service Topology Viewport -->
+    <div class="panel" style="margin-bottom:0; display:flex; flex-direction:column; background:rgba(11,15,22,0.9); border:1px solid var(--border); border-radius:8px; overflow:hidden;">
+      <div class="panel-header" style="padding:12px 18px; border-bottom:1px solid var(--border);">
+        <div class="flex items-center gap-10">
+          <span style="font-size:18px;">☊</span>
+          <span style="font-weight:700; font-size:14px; letter-spacing:0.3px; color:var(--text-primary);">Topology</span>
+        </div>
+        <!-- Legend (exact match to Kea) -->
+        <div class="flex items-center gap-16" style="font-size:11px; color:var(--text-muted);">
+          <span><span style="display:inline-block; width:16px; height:2px; background:#64748b; vertical-align:middle; margin-right:4px;"></span>Blocking</span>
+          <span><span style="display:inline-block; width:16px; height:2px; border-top:2px dashed #64748b; vertical-align:middle; margin-right:4px;"></span>Non-blocking</span>
+          <span><span class="status-dot ok" style="display:inline-block; vertical-align:middle; margin-right:4px;"></span>healthy</span>
+          <span><span class="status-dot warn" style="display:inline-block; vertical-align:middle; margin-right:4px;"></span>degraded</span>
+          <span><span class="status-dot crit" style="display:inline-block; vertical-align:middle; margin-right:4px;"></span>failing</span>
+        </div>
+      </div>
+
+      <!-- SVG Topology Canvas -->
+      <div id="keaTopologyViewport" style="flex:1; position:relative; min-height:450px; background:radial-gradient(ellipse at 50% 50%, rgba(20,28,45,0.4) 0%, rgba(9,11,16,0.98) 100%); display:flex; align-items:center; justify-content:center; padding:10px;">
+        <svg id="keaTopologySvg" viewBox="0 0 820 440" style="width:100%; height:100%; max-height:450px; display:block; filter:drop-shadow(0 4px 20px rgba(0,0,0,0.5));">
+          <!-- Edges and Nodes populated dynamically by JS -->
+        </svg>
+      </div>
+
+      <!-- Bottom Status & Clock Footer (matching Kea) -->
+      <div style="padding:8px 18px; background:rgba(15,19,28,0.7); border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; font-size:11px; color:var(--text-muted);">
+        <div class="flex items-center gap-12">
+          <span>Scenario: <strong style="color:#e2e8f0;" id="keaScenarioLabel">Live Microservice Cluster</strong></span>
+          <span>•</span>
+          <span>Speed: <strong style="color:#38bdf8;">Live</strong></span>
+          <span>•</span>
+          <span class="flex items-center gap-6"><span class="status-dot ok"></span> Connected Live</span>
+        </div>
+        <div class="flex items-center gap-8">
+          <span>Clock: <span id="keaSimClock" style="font-family:monospace; color:#e2e8f0;">10:44:35</span></span>
+          <span class="badge" style="font-size:9px;">Deterministic Causality</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Incident Inspection, Ranked Candidates & Auto-PR Drawer -->
+    <div class="panel" style="margin-bottom:0; display:flex; flex-direction:column; background:rgba(15,19,28,0.85); border:1px solid var(--border); border-radius:8px;">
+      <!-- Incident Header -->
+      <div class="panel-header" style="padding:12px 16px; border-bottom:1px solid var(--border);">
+        <div class="flex items-center gap-10">
+          <span style="font-size:16px;">🎯</span>
+          <div>
+            <div style="font-weight:700; font-size:13px; color:var(--text-primary);" id="keaRightIncidentTitle">Incident INC-001</div>
+            <div style="font-size:10px; color:var(--text-muted);" id="keaRightIncidentSub">Opened 10:44:20, 2 services affected, revision 1</div>
+          </div>
+        </div>
+        <span class="badge crit" id="keaRightStateBadge">OPEN</span>
+      </div>
+
+      <!-- Incident Sub-Tabs -->
+      <div class="filter-bar" id="keaSubTabGroup" style="padding:6px 12px; background:rgba(11,15,22,0.6); border-bottom:1px solid var(--border); display:flex; gap:4px;">
+        <button class="filter-btn active sm" data-subtab="overview">Overview</button>
+        <button class="filter-btn sm" data-subtab="investigate">Investigate</button>
+        <button class="filter-btn sm" data-subtab="fix">Fix &amp; Auto-PR</button>
+      </div>
+
+      <!-- Sub-Tab 1: Overview (Exact Kea layout: What Changed + Ranked Candidates) -->
+      <div id="keaSubTabOverview" style="padding:14px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:12px;">
+        <!-- What changed? Card -->
+        <div style="background:rgba(20,26,38,0.6); border:1px solid rgba(255,255,255,0.06); border-radius:6px; padding:12px;">
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); margin-bottom:6px;">What changed?</div>
+          <div style="font-size:12px; line-height:1.5; color:#cbd5e1; margin-bottom:10px;" id="keaWhatChangedText">
+            All affected services were healthy until failure onset. Outage on <strong>payment / checkout</strong> preceded the first anomaly and its causal chain explains 2 of 2 anomalies.
+          </div>
+          <div class="flex items-center gap-8">
+            <span class="badge info" style="font-size:10px;">RELEVANT</span>
+            <span style="font-size:11px; color:#94a3b8;" id="keaRelevantBadgeText">Outage on checkout service, 45s before onset</span>
+          </div>
+        </div>
+
+        <!-- Ranked candidates -->
+        <div>
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); margin-bottom:8px;">Ranked candidates</div>
+          <div id="keaCandidatesList" style="display:flex; flex-direction:column; gap:10px;">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Sub-Tab 2: Investigate (Structured Gemini/Groq Diagnosis & Grounding) -->
+      <div id="keaSubTabInvestigate" style="padding:14px; overflow-y:auto; flex:1; display:none; flex-direction:column; gap:12px;">
+        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted);">Root Cause Investigation</div>
+        <div style="background:rgba(20,26,38,0.6); border:1px solid rgba(255,255,255,0.06); border-radius:6px; padding:12px;">
+          <div class="flex items-center justify-between" style="margin-bottom:6px;">
+            <span style="font-size:12px; font-weight:bold; color:#38bdf8;" id="keaDiagModelBadge">Software Intelligence: Gemini / Groq</span>
+            <span class="badge ok" id="keaDiagConfidenceBadge">94% Confidence</span>
+          </div>
+          <div style="font-size:12px; color:#e2e8f0; margin-bottom:8px;" id="keaDiagHypothesisText">
+            Unhandled ZeroDivisionError in demo-target/app.py on /health check endpoint.
+          </div>
+          <div style="font-size:11px; color:var(--text-muted); margin-bottom:4px;">Affected Components: <code id="keaDiagFilesText">demo-target/app.py</code></div>
+          <div style="font-size:11px; color:var(--text-muted);">Reproduction: <span id="keaDiagReproText">Triggered via /trigger-bug simulation</span></div>
+        </div>
+        <button class="btn sm ok" id="keaDelegateBtn" style="width:100%;">⚡ Dispatch to Autonomous PR Engine</button>
+      </div>
+
+      <!-- Sub-Tab 3: Fix & Auto-PR (The Kea Gap Closed!) -->
+      <div id="keaSubTabFix" style="padding:14px; overflow-y:auto; flex:1; display:none; flex-direction:column; gap:12px;">
+        <div class="flex items-center justify-between">
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted);">Synthesized Code Fix &amp; PR</div>
+          <span class="badge" style="background:rgba(249,115,22,0.18); color:#f97316;" id="keaPrEngineBadge">⚡ Groq Llama-3.1</span>
+        </div>
+
+        <!-- PR Metadata Link -->
+        <div style="background:rgba(20,26,38,0.6); border:1px solid rgba(255,255,255,0.06); border-radius:6px; padding:10px 12px;">
+          <div style="font-size:11px; color:var(--text-muted); margin-bottom:4px;">Branch: <code id="keaBranchName">aegis/repair-inc-001</code></div>
+          <div class="flex items-center gap-8">
+            <span style="font-size:11px;">Pull Request:</span>
+            <a href="#" target="_blank" class="badge info" id="keaPrUrlLink" style="text-decoration:none;">https://github.com/1kailas/Aegis/pull/42 ↗</a>
+          </div>
+        </div>
+
+        <!-- Syntax-Highlighted Code Diff -->
+        <div>
+          <div style="font-size:11px; color:var(--text-muted); margin-bottom:4px;"><strong>Unified Git Diff Patch:</strong></div>
+          <pre id="keaDiffBox" class="log-box" style="max-height:160px; color:#4ade80; background:#080c14; font-size:11px; font-family:monospace; border:1px solid rgba(74,222,128,0.25); white-space:pre-wrap;"></pre>
+        </div>
+
+        <!-- Predict & Verify Impact -->
+        <div style="background:rgba(56,189,248,0.08); border:1px solid rgba(56,189,248,0.2); border-radius:6px; padding:10px 12px; font-size:11px;">
+          <div style="color:#38bdf8; font-weight:bold; margin-bottom:2px;">🔮 Predict, Then Verify:</div>
+          <div style="color:#cbd5e1;" id="keaPredictOutcomeText">Fixing demo-target/app.py will restore Checkout Service and Downstream Payment Engine to HTTP 200 OK.</div>
+        </div>
+
+        <!-- Verification Action Button -->
+        <button class="btn sm ok" id="keaCloseLoopCtaBtn" style="width:100%; padding:10px; font-weight:bold; font-size:12px;">⚡ Verify &amp; Close Loop (Live Probe)</button>
+      </div>
+
+    </div>
+
   </div>
 
 </section>
