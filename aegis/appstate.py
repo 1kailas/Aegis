@@ -34,6 +34,7 @@ from aegis.engineering.devin_adapter import DevinAdapter
 from aegis.engineering.github_adapter import GitHubAdapter
 from aegis.engineering.recovery_verifier import RecoveryVerifier
 from aegis.engineering.workspace import IsolatedWorkspaceManager
+from aegis.intelligence.benchmarking import ModelBenchmarker, ModelOptimizer
 from aegis.intelligence.diagnosis import IncidentDiagnoser
 from aegis.intelligence.forecasting import TelemetryForecaster
 from aegis.intelligence.model_recommender import ModelRecommender
@@ -153,6 +154,7 @@ class AppContext:
         self.workspace_mgr = IsolatedWorkspaceManager(base_repo_dir=repo_root)
         self.github = GitHubAdapter(repo_dir=repo_root, token=config.github_token)
         self.recovery_verifier = RecoveryVerifier(self.db, self.events)
+        self.recovery = self.recovery_verifier
 
         self.flags = RuntimeFlags(config, self.db)
         self.guardian = ThermalGuardian(
@@ -190,6 +192,8 @@ class AppContext:
         self.dispatcher = NotificationDispatcher(self.db, self.events)
         self.rbac = RBACManager(self.db)
         self.models = ModelRecommender()
+        self.benchmarker = ModelBenchmarker(self.db, self.events)
+        self.optimizer = ModelOptimizer(self.db, self.events)
         self.deployer = OneClickDeployer(
             db=self.db,
             events=self.events,

@@ -4,6 +4,39 @@ All notable changes to the **Aegis AI** platform are documented in this file in 
 
 ---
 
+## 2026-10-25T00:50:00+05:30 — Aegis AI v3.1.0: Real-Time Model Benchmarking, Dynamic Memory Optimization & Cluster AI Capacity Planner
+
+- **Changed:**
+  - Implemented `ModelBenchmarker` in `aegis/intelligence/benchmarking.py`:
+    - Live inference execution and performance profiling: streams generation tokens to calculate Time-To-First-Token (TTFT in milliseconds), tokens/second decoding throughput, and prompt evaluation rate.
+    - Physical memory-bandwidth hardware simulation fallback when offline, evaluating memory bus architecture (GDDR6/GDDR6X vs. DDR4/DDR5) against model weight sizes without generating synthetic or hallucinated results (`status: SIMULATED`).
+    - Database schema migration `migrations/004_v31.sql` creating the `model_benchmarks` table with indexing on `model_name` and `created_at`.
+  - Implemented `ModelOptimizer` in `aegis/intelligence/benchmarking.py`:
+    - Dynamic VRAM/RAM reclamation: scans active model runtimes and proactively unloads idle models (`keep_alive: 0`) to eliminate OOM crash risks during resource pressure.
+    - Fleet-wide AI Capacity Planner: aggregates GPU VRAM and system RAM across all distributed cluster nodes (`ClusterMeshManager`), computing concurrent model headroom (7B, 14B, 32B, 70B models) and recommending optimal node placement strategies.
+  - Enhanced `SelfHealingEngine` in `aegis/control_plane/self_healing.py`:
+    - Closed-loop autonomous verification: automatically executes live health probes for incidents in `CONTAINED` state, transitioning verified stable incidents directly to `RECOVERY_VERIFIED`.
+  - Added REST API endpoints in `aegis/api/server.py`:
+    - `POST /api/models/benchmark`: Dispatches live or physical simulation benchmark for any model.
+    - `GET /api/models/benchmarks`: Queries historical benchmarks with model name filtering.
+    - `POST /api/models/optimize`: Triggers dynamic VRAM/RAM optimization and idle model eviction.
+    - `GET /api/models/cluster-capacity`: Aggregates cluster-wide AI model capacity and node placements.
+  - Added developer CLI subcommands in `aegis/cli/main.py`:
+    - `aegis models benchmark [model_name] [--prompt "..."]`: Runs empirical throughput and TTFT testing.
+    - `aegis models optimize`: Reclaims VRAM and evicts idle models from the terminal.
+  - Upgraded Web Dashboard (`aegis/static/index.html` & `aegis/static/app.js`):
+    - Added **"⚡ Benchmark"** buttons on all model cards in the Model Hub.
+    - Added **"⚡ Optimize VRAM"** and **"🌐 Cluster AI Capacity"** control buttons.
+    - Added **Empirical Model Inference Benchmarks** table displaying real TTFT, throughput, and status.
+    - Added interactive **Cluster AI Capacity Modal** displaying fleet VRAM, RAM, and concurrent model limits.
+  - Version bumped to `3.1.0` in `pyproject.toml`, `aegis/__init__.py`, and web dashboard.
+  - Added automated test suite `tests/test_v31.py` (5 tests) verifying benchmarking, optimization, cluster capacity calculations, closed-loop recovery verification, and CLI subcommands.
+- **Why:** Empirically verifies AI model inference speeds, dynamically optimizes VRAM during high load, plans cluster-wide AI workload placement, and autonomously closes the self-healing incident lifecycle.
+- **Validation:** Executed full test suite: `PYTHONPATH=. .venv/bin/pytest tests/ -v`. All 68 tests passed in 11.28s.
+- **Limitations:** None. Full backward compatibility maintained.
+
+---
+
 ## 2026-10-25T00:40:00+05:30 — Aegis AI v3.0.0: Model Optimization Engine & One-Click Cloud Native Deployer
 
 - **Changed:**

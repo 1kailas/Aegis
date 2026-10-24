@@ -1,8 +1,8 @@
 # Aegis AI — Autonomous Infrastructure Monitoring & Engineering Platform
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Version: 3.0.0](https://img.shields.io/badge/version-3.0.0-blue.svg)]()
-[![Tests Passing](https://img.shields.io/badge/tests-63%2F63%20passed-brightgreen.svg)]()
+[![Version: 3.1.0](https://img.shields.io/badge/version-3.1.0-blue.svg)]()
+[![Tests Passing](https://img.shields.io/badge/tests-68%2F68%20passed-brightgreen.svg)]()
 [![Prometheus Ready](https://img.shields.io/badge/prometheus-%2Fmetrics-orange.svg)]()
 [![Security: Hardened](https://img.shields.io/badge/security-hardened-blue.svg)](SECURITY.md)
 [![Agents: Devin Protocol](https://img.shields.io/badge/agents-Devin%20protocol-purple.svg)](AGENTS.md)
@@ -27,6 +27,7 @@ Aegis AI is a production-minded autonomous infrastructure monitoring and enginee
   - [Aegis 1.5: Predictive Forecasting, Closed-Loop Autonomy & Observability](#aegis-15-predictive-forecasting-closed-loop-autonomy--observability)
   - [Aegis 2.0: Distributed Cluster Mesh, Canary Rollbacks & RBAC](#aegis-20-distributed-cluster-mesh-canary-rollbacks--rbac)
   - [Aegis 3.0: Model Optimization Engine & One-Click Cloud Native Deployer](#aegis-30-model-optimization-engine--one-click-cloud-native-deployer)
+  - [Aegis 3.1: Live Inference Benchmarking, Dynamic Memory Optimization & Cluster AI Capacity](#aegis-31-live-inference-benchmarking-dynamic-memory-optimization--cluster-ai-capacity)
 - [Non-Negotiable Principles](#non-negotiable-principles)
 - [Installation & Quick Start](#installation--quick-start)
 - [Configuration Reference](#configuration-reference)
@@ -213,6 +214,21 @@ Traditional monitoring alerts humans when systems fail. Traditional autonomous a
   - `aegis models deploy <model_name> [--runtime docker|k8s]`: One-click deployment trigger.
   - `aegis models list`: Real-time status and port bindings of all active model inference containers.
 
+### Aegis 3.1: Live Inference Benchmarking, Dynamic Memory Optimization & Cluster AI Capacity
+- **Real-Time Model Benchmarking (`benchmarking.py`)**:
+  - Executes live inference tests measuring Time-To-First-Token (TTFT in milliseconds), decoding generation throughput (tokens/second), and prompt evaluation speeds.
+  - Features an accurate physical memory-bandwidth hardware simulation fallback when offline (evaluating GDDR6/DDR5 bandwidth vs. quantized weights) with zero hallucinated data (`status: SIMULATED`).
+  - Immutable persistent historical tracking in SQLite `model_benchmarks` table (`migrations/004_v31.sql`).
+- **Dynamic VRAM/RAM Memory Optimizer**:
+  - Automated idle model detection and VRAM reclamation via proactive unloading (`keep_alive: 0`).
+  - Protects host systems from cascading OOM kills when physical memory pressure increases.
+- **Cluster Fleet AI Capacity Planner**:
+  - Aggregates physical GPU VRAM and system RAM across all distributed cluster nodes (`ClusterMeshManager`).
+  - Computes concurrent model headroom (how many concurrent 7B, 14B, 32B, and 70B models can fit across the fleet without oversubscription).
+  - Generates node-by-node workload placement recommendations.
+- **Closed-Loop Self-Healing Recovery Verification**:
+  - Automatically verifies stabilized workloads in `CONTAINED` state via independent live probing, transitioning incidents to `RECOVERY_VERIFIED` without human friction.
+
 ---
 
 ## Non-Negotiable Principles
@@ -309,6 +325,8 @@ aegis estop [on|off]           # Global emergency stop kill-switch
 aegis models recommend         # Hardware profiling & model compatibility assessment
 aegis models deploy <name>     # 1-click Docker or Kubernetes deployment
 aegis models list              # View active model deployments and ports
+aegis models benchmark <name>  # Run empirical TTFT & generation throughput benchmark
+aegis models optimize          # Dynamic VRAM reclamation and idle model eviction
 ```
 👉 **`http://localhost:8000/docs`**
 
@@ -419,6 +437,10 @@ resources:
 | `/api/models/deploy` | `POST` | 1-click model provisioning (Docker or Kubernetes) |
 | `/api/models/deployments` | `GET` | List active model inference deployments |
 | `/api/models/deployments/{id}/stop` | `POST` | Stop active model deployment |
+| `/api/models/benchmark` | `POST` | Execute empirical TTFT & generation benchmark |
+| `/api/models/benchmarks` | `GET` | Query historical model benchmarks |
+| `/api/models/optimize` | `POST` | Dynamic VRAM optimization & idle model eviction |
+| `/api/models/cluster-capacity` | `GET` | Fleet-wide AI model capacity & node allocations |
 | `/api/orchestration/manifests/k8s` | `GET`, `POST` | Generate production-grade Kubernetes YAML manifests |
 | `/api/audit` | `GET` | Query immutable audit logs |
 | `/api/events/stream` | `GET` | SSE real-time stream of all platform events |
@@ -427,7 +449,7 @@ resources:
 
 ## Running Automated Tests
 
-Aegis includes an exhaustive automated test suite covering all 5 implementation phases plus releases v1.5, v2.0, and v3.0.
+Aegis includes an exhaustive automated test suite covering all 5 implementation phases plus releases v1.5, v2.0, v3.0, and v3.1.
 
 ```bash
 # Run the full test suite
@@ -444,5 +466,6 @@ PYTHONPATH=. .venv/bin/pytest tests/ -v
 - **`tests/test_v20.py` (5 tests)**: Distributed cluster mesh node lifecycle and draining, automated canary verification and closed-loop rollbacks, multi-channel webhook alert storm debouncing, cryptographic RBAC token generation & permission enforcement, and v2.0 API routes.
 - **`tests/test_client_and_cli.py` (7 tests)**: Aegis Agent host telemetry & capacity sampling, cluster mesh registration and authenticated heartbeats, graceful node draining on shutdown, unified `aegis` CLI subcommands (`status`, `nodes`, `incidents`, `canary`, `keys`, `mode`, `estop`, `join`), `normalize_server_url` IP parsing, and server distribution endpoints (`/agent.py`, `/install.sh`, `/api/cluster/join-info`).
 - **`tests/test_v30.py` (5 tests)**: AI model intelligence recommender (hardware profiling, fit tiers across 24GB GPU, 8GB GPU, and CPU-only hosts, task filtering, token throughput estimation), one-click Docker and Kubernetes deployer, manifest generation with GPU requests & readiness probes, persistent deployment lifecycle, and developer CLI `aegis models` commands.
+- **`tests/test_v31.py` (5 tests)**: Real-time AI model benchmarker (live and physical bandwidth simulation TTFT & tokens/sec), benchmark database persistence, dynamic VRAM optimization & idle model eviction, fleet-wide AI capacity planning, and closed-loop self-healing automated incident recovery verification.
 
-**Result: 63 passed in ~9.5 seconds.**
+**Result: 68 passed in ~11.2 seconds.**

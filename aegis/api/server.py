@@ -784,6 +784,29 @@ def create_app(ctx: AppContext) -> FastAPI:
             raise HTTPException(status_code=404, detail="Deployment not found")
         return {"stopped": True, "status": "stopped", "deployment_id": deployment_id}
 
+    @app.post("/api/models/benchmark", dependencies=[Depends(_auth_dp(ctx))])
+    def run_model_benchmark(payload: dict[str, Any]) -> dict[str, Any]:
+        model_name = payload.get("model_name")
+        if not model_name:
+            raise HTTPException(status_code=422, detail="model_name required")
+        prompt = payload.get("prompt", "Explain the difference between synchronous and asynchronous I/O in 40 words.")
+        endpoint = payload.get("endpoint", "http://127.0.0.1:11434")
+        rec = ctx.benchmarker.run_benchmark(model_name=model_name, prompt=prompt, endpoint=endpoint)
+        return rec.as_dict()
+
+    @app.get("/api/models/benchmarks")
+    def list_model_benchmarks(model_name: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+        return ctx.benchmarker.list_benchmarks(model_name=model_name, limit=limit)
+
+    @app.post("/api/models/optimize", dependencies=[Depends(_auth_dp(ctx))])
+    def optimize_ai_models() -> dict[str, Any]:
+        return ctx.optimizer.optimize_vram()
+
+    @app.get("/api/models/cluster-capacity")
+    def get_cluster_ai_capacity() -> dict[str, Any]:
+        nodes = ctx.cluster.list_nodes()
+        return ctx.optimizer.cluster_ai_capacity(nodes)
+
     @app.post("/api/orchestration/deploy/docker", dependencies=[Depends(_auth_dp(ctx))])
     def orchestration_deploy_docker(payload: dict[str, Any]) -> dict[str, Any]:
         model_name = payload.get("model_name", "qwen2.5-coder:7b")

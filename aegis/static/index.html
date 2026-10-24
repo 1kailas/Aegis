@@ -12,7 +12,7 @@
   <div class="brand">
     <span class="logo">⛨</span>
     <span>Aegis AI</span>
-    <span class="badge-ver">v3.0.0</span>
+    <span class="badge-ver">v3.1.0</span>
   </div>
 
   <div class="ping-meter" id="pingMeter" title="Live roundtrip latency to Aegis Control Plane">
@@ -23,7 +23,7 @@
   <nav class="nav-tabs" id="navTabs">
     <button class="nav-btn active" data-tab="overview">Overview</button>
     <button class="nav-btn" data-tab="cluster">Cluster Mesh <span class="badge info" id="clusterTabBadge" style="display:none; font-size:0.65rem; padding:1px 5px;">0</span></button>
-    <button class="nav-btn" data-tab="models">Model Hub &amp; Deployer <span class="badge ok" style="font-size:0.65rem; padding:1px 5px;">v3.0</span></button>
+    <button class="nav-btn" data-tab="models">Model Hub &amp; Deployer <span class="badge ok" style="font-size:0.65rem; padding:1px 5px;">v3.1</span></button>
     <button class="nav-btn" data-tab="workloads">Docker &amp; K8s</button>
     <button class="nav-btn" data-tab="incidents">Incidents <span class="badge crit" id="incTabBadge" style="display:none; font-size:0.65rem; padding:1px 5px;">0</span></button>
     <button class="nav-btn" data-tab="hardware">Hardware &amp; PSI</button>
@@ -268,7 +268,7 @@
     </div>
   </section>
 
-  <!-- TAB: AI MODELS & ONE-CLICK DEPLOYER (v3.0) -->
+  <!-- TAB: AI MODELS & ONE-CLICK DEPLOYER (v3.1) -->
   <section class="tab-content" id="tab-models">
     <!-- Hardware AI Assessment Banner -->
     <div class="panel" style="border-left: 3px solid var(--info); background: #0c121e;">
@@ -282,6 +282,8 @@
             <button class="filter-btn" data-filter="FAST_CHAT">FAST CHAT</button>
             <button class="filter-btn" data-filter="EMBEDDING">EMBEDDING</button>
           </div>
+          <button class="btn sm" id="optimizeVramBtn" style="border-color:var(--primary); color:var(--primary);">⚡ Optimize VRAM</button>
+          <button class="btn sm" id="clusterCapacityBtn">🌐 Cluster AI Capacity</button>
           <button class="btn sm primary" id="refreshModelsBtn">Refresh Catalog</button>
         </div>
       </div>
@@ -332,6 +334,31 @@
               <th>Port</th>
               <th>Target / Container</th>
               <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Empirical Model Inference Benchmarks Table (v3.1) -->
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Empirical Model Inference Benchmarks <span class="badge info">Live &amp; Physical Simulation</span></h2>
+        <span style="font-size:0.75rem; color:var(--muted);">Real Time-To-First-Token (TTFT), decoding throughput, and memory bandwidth validation</span>
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl" id="benchmarksTbl">
+          <thead>
+            <tr>
+              <th>Benchmark ID</th>
+              <th>Model</th>
+              <th>Runtime</th>
+              <th>Throughput</th>
+              <th>TTFT</th>
+              <th>Prompt Eval</th>
+              <th>Status</th>
+              <th>Created</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -662,6 +689,19 @@
         <button class="btn sm primary" id="copyManifestBtn">Copy Manifest YAML</button>
       </div>
       <pre class="log-box" id="manifestModalContent" style="max-height:450px;"></pre>
+    </div>
+  </div>
+</div>
+
+<!-- Cluster AI Capacity Planner Modal (v3.1) -->
+<div class="modal-overlay" id="clusterCapacityModal" style="display:none;">
+  <div class="modal-window" style="max-width:760px;">
+    <div class="modal-header">
+      <h2>🌐 Cluster AI Capacity &amp; Workload Placement</h2>
+      <button class="btn sm danger icon-only" id="closeClusterCapacityModalBtn">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="clusterCapacityContent" style="font-size:0.85rem; line-height:1.6;"></div>
     </div>
   </div>
 </div>

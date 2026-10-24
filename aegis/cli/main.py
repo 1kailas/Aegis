@@ -531,6 +531,48 @@ def cmd_models(client: httpx.Client, args: argparse.Namespace) -> int:
         print(f"\nTotal: {len(deps)} deployment(s)\n")
         return 0
 
+    elif sub == "benchmark":
+        model_name = getattr(args, "model_name", None) or "qwen2.5-coder:7b"
+        prompt = getattr(args, "prompt", None) or "Explain synchronous vs asynchronous I/O in 40 words."
+        print(f"Benchmarking inference performance for {BOLD}{model_name}{RESET}...")
+        try:
+            r = client.post("/api/models/benchmark", json={"model_name": model_name, "prompt": prompt})
+            if r.status_code == 200:
+                b = r.json()
+                print(f"\n{GREEN}✔ Benchmark Completed ({b.get('status')}):{RESET}")
+                print(f"  Model:            {b.get('model_name')}")
+                print(f"  Runtime:          {b.get('runtime')}")
+                print(f"  Throughput:       {BOLD}{b.get('tokens_per_sec')} tokens/sec{RESET}")
+                print(f"  Time-To-First-Tok:{BOLD} {b.get('ttft_ms')} ms{RESET}")
+                print(f"  Prompt Eval Speed:{BOLD} {b.get('prompt_eval_tps')} tokens/sec{RESET}")
+                print(f"  Tokens Generated: {b.get('total_tokens')}")
+                print(f"  Duration:         {b.get('duration_s')}s")
+                print(f"  Details:          {DIM}{b.get('details')}{RESET}\n")
+                return 0
+            else:
+                print(f"{RED}Benchmark failed (HTTP {r.status_code}):{RESET} {r.text}")
+                return 1
+        except Exception as e:
+            print(f"{RED}Error:{RESET} {e}")
+            return 1
+
+    elif sub == "optimize":
+        print("Triggering dynamic AI model VRAM/RAM optimization...")
+        try:
+            r = client.post("/api/models/optimize", json={})
+            if r.status_code == 200:
+                res = r.json()
+                print(f"{GREEN}✔ Memory Optimization Complete:{RESET}")
+                print(f"  Unloaded Models: {', '.join(res.get('unloaded_models') or ['None (all active/optimal)']) }")
+                print(f"  Reclaimed VRAM:  {res.get('reclaimed_vram_mb')} MB\n")
+                return 0
+            else:
+                print(f"{RED}Failed (HTTP {r.status_code}):{RESET} {r.text}")
+                return 1
+        except Exception as e:
+            print(f"{RED}Error:{RESET} {e}")
+            return 1
+
     return 0
 
 
@@ -639,6 +681,10 @@ def main(argv: list[str] | None = None) -> None:
     p_dep.add_argument("--port", "-p", type=int, default=11434)
     p_dep.add_argument("--no-gpu", action="store_true")
     sub_models.add_parser("list", help="List active model deployments")
+    p_bench = sub_models.add_parser("benchmark", help="Run empirical inference throughput benchmark")
+    p_bench.add_argument("model_name", nargs="?", default="qwen2.5-coder:7b", help="Model name to benchmark")
+    p_bench.add_argument("--prompt", help="Custom prompt string")
+    sub_models.add_parser("optimize", help="Dynamic VRAM/RAM memory optimization & idle model eviction")
 
     args = p.parse_args(argv)
 

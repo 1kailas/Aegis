@@ -543,6 +543,7 @@ async function refreshModels() {
           <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:auto;">
             <button class="btn sm primary" onclick="deployModel('${s.name}', 'docker')">1-Click Docker</button>
             <button class="btn sm" onclick="deployModel('${s.name}', 'k8s')">1-Click K8s</button>
+            <button class="btn sm" onclick="runBenchmark('${s.name}')">⚡ Benchmark</button>
             <button class="btn sm" onclick="viewK8sManifest('${s.name}')">View K8s YAML</button>
           </div>
         </div>
@@ -568,6 +569,7 @@ async function refreshModels() {
           <div style="display:flex; gap:6px; margin-top:6px;">
             <button class="btn sm" onclick="deployModel('${s.name}', 'docker')">Deploy Docker</button>
             <button class="btn sm" onclick="deployModel('${s.name}', 'k8s')">Deploy K8s</button>
+            <button class="btn sm" onclick="runBenchmark('${s.name}')">⚡ Benchmark</button>
           </div>
         </div>
       `;
@@ -614,8 +616,131 @@ async function refreshModels() {
         `;
       }).join("");
     }
+
+    // 6. Empirical Benchmarks (v3.1)
+    await refreshBenchmarks();
   } catch {}
 }
+
+async function refreshBenchmarks() {
+  try {
+    const benches = await (await fetch("/api/models/benchmarks")).json();
+    const btb = $("benchmarksTbl")?.querySelector("tbody");
+    if (!btb) return;
+    if (!benches.length) {
+      btb.innerHTML = `<tr><td colspan="8" style="color:var(--muted); text-align:center; padding:12px;">No benchmarks executed yet. Click "⚡ Benchmark" on any model above to run live empirical testing.</td></tr>`;
+    } else {
+      btb.innerHTML = benches.map(b => {
+        const stClass = b.status === "COMPLETED" ? "ok" : b.status === "SIMULATED" ? "info" : "warn";
+        return `
+          <tr>
+            <td><code>${b.benchmark_id}</code></td>
+            <td><strong>${b.model_name}</strong></td>
+            <td><code>${b.runtime}</code></td>
+            <td><strong style="color:var(--text-bright);">${b.tokens_per_sec} t/s</strong></td>
+            <td>${b.ttft_ms} ms</td>
+            <td>${b.prompt_eval_tps || "--"} t/s</td>
+            <td><span class="badge ${stClass}">${b.status}</span></td>
+            <td><span class="time-ago">${b.created_at ? b.created_at.substring(11, 19) : ""}</span></td>
+          </tr>
+        `;
+      }).join("");
+    }
+  } catch {}
+}
+
+window.runBenchmark = async function(modelName) {
+  showToast(`Running inference benchmark for ${modelName}...`, "info");
+  try {
+    const res = await (await fetch("/api/models/benchmark", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model_name: modelName })
+    })).json();
+    showToast(`Benchmark complete: ${res.tokens_per_sec} tokens/s (TTFT: ${res.ttft_ms}ms)`, "ok");
+    await refreshBenchmarks();
+  } catch (e) {
+    showToast(`Benchmark error: ${e}`, "crit");
+  }
+};
+
+window.optimizeVram = async function() {
+  showToast("Optimizing AI model memory allocation...", "info");
+  try {
+    const res = await (await fetch("/api/models/optimize", { method: "POST" })).json();
+    showToast(`Reclaimed ${res.reclaimed_vram_mb} MB VRAM (${res.unloaded_models.length} idle models unloaded)`, "ok");
+  } catch (e) {
+    showToast(`Optimize error: ${e}`, "crit");
+  }
+};
+
+window.openClusterCapacityModal = async function() {
+  try {
+    const cap = await (await fetch("/api/models/cluster-capacity")).json();
+    const hw = cap.concurrent_model_headroom || {};
+    const nodes = cap.node_placements || [];
+
+    $("clusterCapacityContent").innerHTML = `
+      <div style="background:#090d16; border:1px solid var(--line); border-radius:6px; padding:14px; margin-bottom:14px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+          <div>
+            <div style="font-size:0.75rem; color:var(--muted);">TOTAL FLEET VRAM</div>
+            <div style="font-size:1.4rem; font-weight:700; color:var(--primary);">${cap.total_cluster_vram_gb} GB</div>
+          </div>
+          <div>
+            <div style="font-size:0.75rem; color:var(--muted);">TOTAL FLEET RAM</div>
+            <div style="font-size:1.4rem; font-weight:700; color:var(--text-bright);">${cap.total_cluster_ram_gb} GB</div>
+          </div>
+          <div>
+            <div style="font-size:0.75rem; color:var(--muted);">ONLINE NODES</div>
+            <div style="font-size:1.4rem; font-weight:700; color:var(--ok);">${cap.online_nodes}</div>
+          </div>
+        </div>
+        <div style="font-size:0.8rem; color:var(--dim);">
+          <strong>Placement Strategy:</strong> ${cap.recommended_strategy}
+        </div>
+      </div>
+
+      <h3 style="font-size:0.9rem; margin-bottom:8px;">Concurrent Model Headroom</h3>
+      <div class="cards" style="grid-template-columns:repeat(4, 1fr); margin-bottom:14px;">
+        <div class="card" style="padding:10px; text-align:center;">
+          <div style="font-size:0.75rem; color:var(--muted);">7B Models</div>
+          <div style="font-size:1.3rem; font-weight:700; color:var(--ok);">${hw["7b_models"] || 0}</div>
+        </div>
+        <div class="card" style="padding:10px; text-align:center;">
+          <div style="font-size:0.75rem; color:var(--muted);">14B Models</div>
+          <div style="font-size:1.3rem; font-weight:700; color:var(--info);">${hw["14b_models"] || 0}</div>
+        </div>
+        <div class="card" style="padding:10px; text-align:center;">
+          <div style="font-size:0.75rem; color:var(--muted);">32B Models</div>
+          <div style="font-size:1.3rem; font-weight:700; color:var(--warn);">${hw["32b_models"] || 0}</div>
+        </div>
+        <div class="card" style="padding:10px; text-align:center;">
+          <div style="font-size:0.75rem; color:var(--muted);">70B Frontier</div>
+          <div style="font-size:1.3rem; font-weight:700; color:var(--crit);">${hw["70b_models"] || 0}</div>
+        </div>
+      </div>
+
+      <h3 style="font-size:0.9rem; margin-bottom:8px;">Node-by-Node Recommendations</h3>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        ${nodes.map(n => `
+          <div style="background:var(--card); border:1px solid var(--line); border-radius:5px; padding:10px 12px; display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <strong>${n.node_id}</strong> (${n.hostname}) · <code>${n.ip_address}</code>
+              <div style="font-size:0.75rem; color:var(--muted);">VRAM: ${n.vram_gb} GB | RAM: ${n.ram_gb} GB</div>
+            </div>
+            <div>
+              ${(n.suitable_models || []).map(sm => `<span class="badge info" style="margin-left:4px;">${sm}</span>`).join("")}
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    `;
+    $("clusterCapacityModal").style.display = "flex";
+  } catch (e) {
+    showToast(`Error fetching cluster capacity: ${e}`, "crit");
+  }
+};
 
 window.deployModel = async function(modelName, runtime = "docker") {
   showToast(`Deploying ${modelName} to ${runtime}...`, "info");
@@ -657,6 +782,9 @@ window.stopDeployment = async function(depId) {
 $("closeManifestModalBtn")?.addEventListener("click", () => { $("manifestModal").style.display = "none"; });
 $("copyManifestBtn")?.addEventListener("click", () => { copySnippet($("manifestModalContent").textContent); });
 $("refreshModelsBtn")?.addEventListener("click", refreshModels);
+$("optimizeVramBtn")?.addEventListener("click", optimizeVram);
+$("clusterCapacityBtn")?.addEventListener("click", openClusterCapacityModal);
+$("closeClusterCapacityModalBtn")?.addEventListener("click", () => { $("clusterCapacityModal").style.display = "none"; });
 
 document.querySelectorAll("#modelTaskFilterGroup .filter-btn").forEach(btn => {
   btn.addEventListener("click", () => {
