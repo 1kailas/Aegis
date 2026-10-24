@@ -1,0 +1,46 @@
+# Aegis application configuration.
+# Secrets (GEMINI_API_KEY, GITHUB_TOKEN) never live here; put them in .env.
+
+database:
+  path: data/aegis.db
+  # High-volume metric history is pruned beyond this horizon.
+  telemetry_retention_hours: 24
+
+monitoring:
+  # Baseline sampling interval in seconds.
+  collect_interval_s: 5.0
+  # Faster sampling is engaged while a WARNING/CRITICAL condition is active.
+  warning_interval_s: 1.5
+  critical_interval_s: 1.0
+  # How often sensor identity/descriptions are re-scanned.
+  sensor_snapshot_seconds: 30.0
+  # Rolling in-memory history cap for charts.
+  history_points_max: 900
+  # monitoring_only | policy_autonomous
+  mode: monitoring_only
+  # Simulated sensor overrides are used for demos/tests; they are always
+  # labelled SIMULATED_OVERRIDE and are disabled in policy_autonomous mode
+  # unless explicitly re-allowed in policies.yaml.
+  simulated_overrides_enabled: true
+
+models:
+  investigator: qwen2.5:1.5b
+  repairer: qwen2.5-coder:1.5b
+  ollama_url: http://127.0.0.1:11434
+  inference_timeout_s: 120
+  gemini_model: gemini-2.5-flash
+  gemini_max_requests_per_incident: 1
+  gemini_max_requests_per_hour: 6
+  gemini_max_input_chars: 20000
+  gemini_timeout_s: 60
+
+server:
+  host: 127.0.0.1
+  port: 8480
+  # Optional bearer token required for state-changing API calls.
+  # Leave empty for local-only development binding.
+  api_token: ""
+
+logging:
+  dir: logs
+  level: INFO

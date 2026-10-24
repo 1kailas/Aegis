@@ -21,4 +21,11 @@ __pycache__/
 Thumbs.db
 *.log
 
+# Aegis runtime state (databases, logs, workspaces) must stay local.
+data/
+logs/
+repair-workspaces/
+*.pid
+STOP
+
 # Add entries appropriate to your chosen language or framework.

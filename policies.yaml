@@ -1,0 +1,45 @@
+# Aegis thermal policy and action allowlist.
+#
+# DEFAULTS ARE CONSERVATIVE PLACEHOLDERS. Thresholds must be calibrated to
+# the actual machine before enabling policy_autonomous mode. A missing or
+# stale sensor must never be interpreted as a safe condition.
+
+thermal:
+  # 'auto' ties the guardian to the hottest reliable registered CPU/package
+  # temperature sensor. Set an explicit sensor id to pin one device.
+  sensor: auto
+
+  # Thresholds (degC). Clearing below WARNING requires hysteresis.
+  warning_c: 75.0
+  critical_c: 85.0
+  recovery_below_c: 68.0
+  hysteresis_c: 3.0
+
+  # Rate-of-rise alerting: deg per second over the window escalates one
+  # level when within 5degC of the threshold.
+  rate_per_s_warning: 0.5
+
+  window_points: 12
+  stale_after_s: 30
+
+  # CRITICAL -> RECOVERY requires temp below recovery_below_c for this long.
+  recovery_hold_s: 60
+
+  # Trend estimate (seconds to threshold) is suppressed when the regression
+  # slope is below this or too few points exist.
+  slope_min_for_estimate: 0.05   # deg/s
+  min_points_for_slope: 5
+
+actions:
+  warning_actions:
+    - increase_sampling
+    - create_or_update_incident
+  critical_actions:
+    - increase_sampling
+    - create_or_update_incident
+    - set_backpressure
+
+# Global emergency stop: when true, autonomous remediation actions are
+# blocked everywhere until cleared through the API. Telemetry, thermal
+# monitoring, incident persistence and alerting stay active.
+emergency_stop: false
