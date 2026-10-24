@@ -4,6 +4,36 @@ All notable changes to the **Aegis AI** platform are documented in this file in 
 
 ---
 
+## 2026-10-25T04:30:00+05:30 — Aegis AI v3.2.0: Groq Autonomous PR & Patch Synthesis Engine (Rate-Limit Guarded)
+
+- **Added & Changed:**
+  - **Groq Autonomous PR & Code Patch Engine (`aegis/engineering/groq_repair.py`)**:
+    - Integrated Groq API (`llama-3.1-8b-instant`, with graceful fallback to `qwen/qwen3.8-27b`) specifically and strictly for **PR code repair and patch generation**.
+    - Generates unified git diff patches from evidence, error traces, and acceptance criteria.
+    - Publishes PR metadata and links (`aegis/repair-{incident_id}`).
+  - **Strict Rate-Limiting Guardrails**:
+    - Protects the Groq quota with an enforced hourly sliding-window request cap (`GROQ_MAX_REQ_PER_HOUR=15`).
+    - Enforces Output Tokens Per Minute (OTPM) constraints (`max_tokens: 450`) to avoid HTTP 429 rate-limit exhaustion on free tiers.
+    - Refuses to invoke the LLM for background polling, health probes, or telemetry, reserving API tokens strictly for PR generation.
+  - **DevinAdapter Fallback Integration**:
+    - When Devin API is unconfigured or offline, `DevinAdapter.dispatch_task` seamlessly engages the Groq PR Engine.
+    - Transitions incident lifecycle to `PR_OPENED` with synthesized diff patch and PR URL attached as timeline evidence.
+    - Full closed-loop verification: `POST /api/devin/tasks/{id}/close-loop` tests deployed code against the live health probe and transitions incident to `RECOVERY_VERIFIED`.
+  - **Security & Secret Scrubbing Hardening**:
+    - Redacted all Groq API keys (`gsk_[A-Za-z0-9_-]{30,}`) across `IncidentDiagnoser`, `DockerAdapter`, `GroqRepairEngine`, and server logs as `[REDACTED_GROQ_KEY]`.
+    - Sanitized token representation in API outputs (`f"{key[:6]}...{key[-4:]}"`).
+  - **Topology Graph & Live Troubleshooting Center Updates**:
+    - Added `key-groq` node to `GET /api/security/graph` with Groq Orange branding, status indicator, and quota monitoring.
+    - Updated `POST /api/security/test-key` with zero-token credential and latency verification against Groq API.
+  - **UI Incident Timeline & PR Diff Viewer**:
+    - Updated `Stage 4: Autonomous Pull Request` in `aegis/static/app.js` to render the syntax-highlighted unified diff patch and engine badge (`⚡ Engine: GROQ (llama-3.1-8b-instant)`).
+    - Updated `aegis/static/index.html` with `⚡ Autonomous PR (Groq/Devin)` action.
+  - **Test Suite Expansion**:
+    - Added `tests/test_groq_pr.py` covering configuration, secret scrubbing, rate-limiting enforcement, unified diff parsing, dispatch integration, topology graph, and health endpoints.
+    - Test suite expanded to **97 passing tests** (100% pass rate).
+
+---
+
 ## 2026-10-25T04:10:00+05:30 — Aegis AI v3.2.0: Interactive API Key Topology Graph & Real-Time Troubleshooting Center
 
 - **Added & Changed:**

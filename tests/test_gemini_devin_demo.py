@@ -192,6 +192,7 @@ def test_devin_task_creation_with_diagnostics(app_ctx: AppContext):
 
 def test_devin_polling_honest_unconfigured(app_ctx: AppContext):
     """Verify Devin adapter honestly reports AWAITING_DEVIN_API_KEY when key is not set."""
+    app_ctx.devin.groq_engine = None
     app = create_app(app_ctx)
     client = TestClient(app)
 

@@ -280,6 +280,7 @@ class IncidentDiagnoser:
         joined = "\n".join(prompt_facts)
         # Redact tokens and keys
         joined = re.sub(r"(AIzaSy[A-Za-z0-9_-]{33})", "[REDACTED_GEMINI_KEY]", joined)
+        joined = re.sub(r"(gsk_[A-Za-z0-9_-]{30,})", "[REDACTED_GROQ_KEY]", joined)
         joined = re.sub(r"(gh[pousr]_[A-Za-z0-9_]{30,})", "[REDACTED_GITHUB_TOKEN]", joined)
         joined = re.sub(r"(devin_[A-Za-z0-9_-]{16,}|cog_[A-Za-z0-9_-]{16,})", "[REDACTED_DEVIN_KEY]", joined)
         joined = re.sub(r"(Bearer\s+[A-Za-z0-9_\-\.]{20,})", "Bearer [REDACTED_TOKEN]", joined)
@@ -288,6 +289,9 @@ class IncidentDiagnoser:
         devin_env_k = os.environ.get("DEVIN_API_KEY")
         if devin_env_k and len(devin_env_k) > 6:
             joined = joined.replace(devin_env_k, "[REDACTED_DEVIN_KEY]")
+        groq_env_k = os.environ.get("GROQ_API_KEY")
+        if groq_env_k and len(groq_env_k) > 6:
+            joined = joined.replace(groq_env_k, "[REDACTED_GROQ_KEY]")
         return joined
 
     def _diagnose_local(self, iid: str, context: str, role: str = "software") -> DiagnosisResult | None:

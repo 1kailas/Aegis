@@ -139,6 +139,7 @@ def create_app(ctx: AppContext) -> FastAPI:
             (ctx.devin.api_key and len(ctx.devin.api_key.strip()) > 5)
             or bool(getattr(ctx.devin, "_desktop_cli", None))
         )
+        groq_cfg = bool(getattr(ctx, "groq_repair", None) and ctx.groq_repair.is_configured())
         return {
             "status": "ok" if engine_running else "degraded",
             "version": __version__,
@@ -150,12 +151,15 @@ def create_app(ctx: AppContext) -> FastAPI:
             "host_id": ctx.identity.host_id,
             "gemini_configured": gemini_cfg,
             "devin_configured": devin_cfg,
+            "groq_configured": groq_cfg,
+            "active_pr_engine": "devin" if devin_cfg else ("groq" if groq_cfg else "none"),
             "dual_models": {
                 "software_model": {
-                    "role": "Software Intelligence (Application, 5xx outages & Devin PRs)",
+                    "role": "Software Intelligence (Application, 5xx outages & Autonomous PRs)",
                     "name": ctx.config.models.software_model,
                     "provider": "Gemini Cloud API",
-                    "configured": gemini_cfg,
+                    "pr_engine": f"Groq ({ctx.config.models.groq_model})" if groq_cfg else ("Devin SRE" if devin_cfg else "Awaiting Setup"),
+                    "configured": gemini_cfg or groq_cfg,
                 },
                 "hardware_model": {
                     "role": "Hardware & Scaling Intelligence (Compute Saturation, Auto-scaling & Thermal)",
@@ -173,14 +177,16 @@ def create_app(ctx: AppContext) -> FastAPI:
             (ctx.devin.api_key and len(ctx.devin.api_key.strip()) > 5)
             or bool(getattr(ctx.devin, "_desktop_cli", None))
         )
+        groq_cfg = bool(getattr(ctx, "groq_repair", None) and ctx.groq_repair.is_configured())
         return {
             "software_model": {
                 "role": "Software Intelligence",
                 "name": ctx.config.models.software_model,
                 "provider": "Gemini Cloud API",
-                "configured": gemini_cfg,
-                "description": "Monitors code errors, exceptions, and 5xx outages; synthesizes repair briefs and triggers Devin PRs",
-                "capabilities": ["Code Bug Diagnosis", "5xx Outage Analysis", "Devin PR Generation", "Recovery Verification"],
+                "pr_engine": f"Groq ({ctx.config.models.groq_model})" if groq_cfg else ("Devin SRE" if devin_cfg else "Awaiting Setup"),
+                "configured": gemini_cfg or groq_cfg,
+                "description": "Monitors code errors, exceptions, and 5xx outages; synthesizes repair briefs and triggers autonomous PRs",
+                "capabilities": ["Code Bug Diagnosis", "5xx Outage Analysis", "Devin/Groq PR Generation", "Recovery Verification"],
             },
             "hardware_model": {
                 "role": "Hardware & Scaling Intelligence",
@@ -191,6 +197,8 @@ def create_app(ctx: AppContext) -> FastAPI:
                 "capabilities": ["Auto-Scale Instances (Replicas)", "VRAM Model Eviction", "Deterministic Cache Trim", "Thermal Backpressure"],
             },
             "devin_configured": devin_cfg,
+            "groq_configured": groq_cfg,
+            "active_pr_engine": "devin" if devin_cfg else ("groq" if groq_cfg else "none"),
         }
 
     @app.get("/api/overview")
@@ -1056,6 +1064,7 @@ def create_app(ctx: AppContext) -> FastAPI:
             (ctx.devin.api_key and len(ctx.devin.api_key.strip()) > 5)
             or bool(getattr(ctx.devin, "_desktop_cli", None))
         )
+        groq_configured = bool(getattr(ctx, "groq_repair", None) and ctx.groq_repair.is_configured())
         github_configured = bool(ctx.config.github_token and len(ctx.config.github_token.strip()) > 5)
 
         gemini_redacted = (
@@ -1067,6 +1076,11 @@ def create_app(ctx: AppContext) -> FastAPI:
             f"{ctx.devin.api_key[:6]}...{ctx.devin.api_key[-4:]}"
             if ctx.devin.api_key and len(ctx.devin.api_key) > 8
             else ("Desktop CLI Session" if getattr(ctx.devin, "_desktop_cli", None) else "Not configured")
+        )
+        groq_redacted = (
+            f"{ctx.config.groq_api_key[:6]}...{ctx.config.groq_api_key[-4:]}"
+            if groq_configured
+            else "Not configured"
         )
         github_redacted = (
             f"{ctx.config.github_token[:6]}...{ctx.config.github_token[-4:]}"
@@ -1134,6 +1148,28 @@ def create_app(ctx: AppContext) -> FastAPI:
                     "endpoint": ctx.config.devin_api_url,
                     "capabilities": ["Autonomous PR Generation", "Isolated Workspace Patching", "Closed-Loop Recovery"],
                     "troubleshooting": "Configured via DEVIN_API_KEY. When unconfigured, repair briefs are safely queued in SQLite without faking PRs."
+                }
+            },
+            {
+                "id": "key-groq",
+                "label": "Groq API Key (PR Engine)",
+                "type": "cloud_ai",
+                "category": "ai_cloud",
+                "status": "HEALTHY" if groq_configured else "AWAITING_SETUP",
+                "color": "#f97316",
+                "icon": "⚡",
+                "role": "Autonomous Code Repair & PR Generator",
+                "target": f"Groq Cloud API ({ctx.config.models.groq_model})",
+                "source": ".env (GROQ_API_KEY)",
+                "redacted_token": groq_redacted,
+                "quota": f"{ctx.config.models.groq_max_requests_per_hour} req/hr (Strict Rate-Guarded)",
+                "scopes": ["chat.completions", "patch:synthesize", "pr:generate", "rate_limited:strict"],
+                "details": {
+                    "model": f"{ctx.config.models.groq_model} (fallback: {ctx.config.models.groq_fallback_model})",
+                    "budget": f"{ctx.config.models.groq_max_requests_per_hour} req/hr limit",
+                    "policy": "PR-Only: strictly guarded to prevent token/request rate-limit exhaustion",
+                    "capabilities": ["Unified Diff Patch Generation", "Autonomous Bug Fixing", "PR Automation"],
+                    "troubleshooting": "Configured via GROQ_API_KEY. Exclusively engaged for PR patch synthesis with strict hourly rate limiting."
                 }
             },
             {
@@ -1380,6 +1416,47 @@ def create_app(ctx: AppContext) -> FastAPI:
                 "latency_ms": 0,
                 "message": "DEVIN_API_KEY not configured. Aegis queues repair tasks safely in SQLite.",
             }
+
+        elif "groq" in node_id.lower():
+            if not (getattr(ctx, "groq_repair", None) and ctx.groq_repair.is_configured()):
+                return {
+                    "success": False,
+                    "node_id": node_id,
+                    "status": "MISSING",
+                    "latency_ms": 0,
+                    "message": "GROQ_API_KEY is not configured in .env.",
+                }
+            try:
+                with httpx.Client(timeout=8.0) as client:
+                    resp = client.get(
+                        "https://api.groq.com/openai/v1/models",
+                        headers={"Authorization": f"Bearer {ctx.config.groq_api_key}"},
+                    )
+                    latency = round((time.time() - t0) * 1000, 1)
+                    if resp.status_code == 200:
+                        return {
+                            "success": True,
+                            "node_id": node_id,
+                            "status": "HEALTHY",
+                            "latency_ms": max(10.0, latency),
+                            "message": f"Groq PR Engine authenticated successfully ({ctx.config.models.groq_model}). Fast token response verified.",
+                        }
+                    else:
+                        return {
+                            "success": False,
+                            "node_id": node_id,
+                            "status": "ERROR",
+                            "latency_ms": latency,
+                            "message": f"Groq returned HTTP {resp.status_code}: {resp.text[:120]}",
+                        }
+            except Exception as e:
+                return {
+                    "success": False,
+                    "node_id": node_id,
+                    "status": "UNREACHABLE",
+                    "latency_ms": round((time.time() - t0) * 1000, 1),
+                    "message": f"Failed to connect to Groq endpoint: {e}",
+                }
 
         elif "target-" in node_id.lower():
             tid = node_id.replace("target-", "")

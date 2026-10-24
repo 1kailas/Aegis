@@ -49,6 +49,10 @@ class ModelsConfig(BaseModel):
     gemini_max_requests_per_hour: int = 30
     gemini_max_input_chars: int = 20000
     gemini_timeout_s: float = 60.0
+    groq_model: str = "llama-3.1-8b-instant"
+    groq_fallback_model: str = "qwen/qwen3.8-27b"
+    groq_max_requests_per_hour: int = 15
+    groq_timeout_s: float = 30.0
 
 
 class ServerConfig(BaseModel):
@@ -126,6 +130,7 @@ class AppConfig(BaseModel):
     # Secrets (from environment only; never from yaml/git)
     gemini_api_key: str | None = None
     devin_api_key: str | None = None
+    groq_api_key: str | None = None
     devin_api_url: str = "https://api.devin.ai/v1"
     github_token: str | None = None
 
@@ -202,6 +207,7 @@ def load_config(
     # Secrets only via env (or local gitignored .env at repo root).
     app.gemini_api_key = _secret_from_env("GEMINI_API_KEY")
     app.devin_api_key = _secret_from_env("DEVIN_API_KEY")
+    app.groq_api_key = _secret_from_env("GROQ_API_KEY")
     env_devin_url = _secret_from_env("DEVIN_API_URL")
     if env_devin_url:
         app.devin_api_url = env_devin_url
@@ -217,6 +223,18 @@ def load_config(
     if env_max_req:
         try:
             app.models.gemini_max_requests_per_hour = int(env_max_req)
+        except ValueError:
+            pass
+    env_groq_model = _secret_from_env("GROQ_MODEL")
+    if env_groq_model:
+        app.models.groq_model = env_groq_model
+    env_groq_fallback = _secret_from_env("GROQ_FALLBACK_MODEL")
+    if env_groq_fallback:
+        app.models.groq_fallback_model = env_groq_fallback
+    env_groq_max_req = _secret_from_env("GROQ_MAX_REQ_PER_HOUR")
+    if env_groq_max_req:
+        try:
+            app.models.groq_max_requests_per_hour = int(env_groq_max_req)
         except ValueError:
             pass
 

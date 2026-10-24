@@ -32,6 +32,7 @@ from aegis.control_plane.thermal_guardian import ThermalGuardian
 from aegis.engineering.canary_verifier import CanaryVerificationEngine
 from aegis.engineering.devin_adapter import DevinAdapter
 from aegis.engineering.github_adapter import GitHubAdapter
+from aegis.engineering.groq_repair import GroqRepairEngine
 from aegis.engineering.recovery_verifier import RecoveryVerifier
 from aegis.engineering.workspace import IsolatedWorkspaceManager
 from aegis.intelligence.benchmarking import ModelBenchmarker, ModelOptimizer
@@ -152,7 +153,14 @@ class AppContext:
             hardware_model=config.models.hardware_model,
             max_gemini_requests_per_hour=config.models.gemini_max_requests_per_hour,
         )
-        self.devin = DevinAdapter(self.db, api_key=config.devin_api_key)
+        self.groq_repair = GroqRepairEngine(
+            api_key=config.groq_api_key,
+            model=config.models.groq_model,
+            fallback_model=config.models.groq_fallback_model,
+            max_requests_per_hour=config.models.groq_max_requests_per_hour,
+            timeout_s=config.models.groq_timeout_s,
+        )
+        self.devin = DevinAdapter(self.db, api_key=config.devin_api_key, groq_engine=self.groq_repair)
         self.remediation = RemediationPolicyEngine(self.db, self.events)
         repo_root = Path(__file__).resolve().parent.parent
         self.workspace_mgr = IsolatedWorkspaceManager(base_repo_dir=repo_root)

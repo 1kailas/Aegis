@@ -99,30 +99,44 @@ class RepairTask:
 
 
 class DevinAdapter:
-    """Manages integration with Devin as the designated repair engineer."""
+    """Manages integration with Devin and Groq as autonomous repair engines."""
 
-    def __init__(self, db: Database, api_key: str | None = None):
+    def __init__(
+        self,
+        db: Database,
+        api_key: str | None = None,
+        groq_engine: Any = None,
+    ):
         self.db = db
         self.api_key = api_key or os.environ.get("DEVIN_API_KEY")
         self._desktop_cli = self._find_desktop_cli()
+        self.groq_engine = groq_engine
 
     def _find_desktop_cli(self) -> str | None:
         return shutil.which("devin") or shutil.which("devin-desktop")
 
     def status(self) -> dict[str, Any]:
-        """Honest status of the Devin integration."""
+        """Honest status of the Devin & Groq repair integrations."""
         configured = bool(self.api_key) or bool(self._desktop_cli)
+        groq_configured = bool(self.groq_engine and getattr(self.groq_engine, "is_configured", lambda: False)())
+        active_engine = "devin" if configured else ("groq" if groq_configured else "none")
         return {
             "provider": "devin",
             "configured": configured,
             "has_api_key": bool(self.api_key),
             "has_desktop_cli": bool(self._desktop_cli),
             "cli_path": self._desktop_cli,
-            "status": "READY" if configured else "AWAITING_EXTERNAL_SETUP",
+            "groq_pr_configured": groq_configured,
+            "active_pr_engine": active_engine,
+            "groq_status": self.groq_engine.status() if groq_configured else None,
+            "status": "READY" if (configured or groq_configured) else "AWAITING_EXTERNAL_SETUP",
             "setup_instructions": (
-                "To enable automated Devin dispatch, set DEVIN_API_KEY in .env "
-                "or ensure the Devin desktop CLI is on PATH. Unconfigured tasks "
-                "are queued safely in SQLite."
+                "Automated repair engine active (Engine: " + active_engine.upper() + "). Ready to generate PRs."
+                if (configured or groq_configured)
+                else (
+                    "To enable automated repair dispatch, set DEVIN_API_KEY or GROQ_API_KEY in .env. "
+                    "Unconfigured tasks are queued safely in SQLite."
+                )
             ),
         }
 
@@ -209,8 +223,116 @@ class DevinAdapter:
         return task
 
     def dispatch_task(self, task: RepairTask) -> dict[str, Any]:
-        """Dispatches repair task to Devin API if configured, otherwise keeps queued."""
+        """Dispatches repair task to Devin API if configured, otherwise falls back to Groq PR engine."""
         if not self.api_key:
+            # Check if Groq PR Engine is configured
+            if self.groq_engine and getattr(self.groq_engine, "is_configured", lambda: False)():
+                target_code = ""
+                for af in task.affected_files:
+                    p = Path(af)
+                    if not p.is_absolute():
+                        p = Path(__file__).resolve().parent.parent.parent / af
+                    if p.exists() and p.is_file():
+                        try:
+                            target_code = p.read_text(encoding="utf-8")[:1500]
+                            break
+                        except Exception:
+                            pass
+
+                groq_res = self.groq_engine.generate_repair_patch(
+                    incident_id=task.incident_id,
+                    title=task.title,
+                    summary=task.summary,
+                    affected_files=task.affected_files,
+                    root_causes=task.root_cause_hypotheses,
+                    acceptance_criteria=task.acceptance_criteria,
+                    error_logs=task.sanitized_logs,
+                    existing_code=target_code,
+                )
+
+                if groq_res.get("success"):
+                    task.status = "COMPLETED"
+                    task.patch = groq_res.get("patch")
+                    pr_meta = self.groq_engine.publish_pr(
+                        incident_id=task.incident_id,
+                        title=task.title,
+                        patch=task.patch,
+                        repo_url=task.affected_repo,
+                    )
+                    task.pull_request_url = pr_meta.get("pr_url")
+
+                    # Update SQLite jobs table
+                    self.db.execute(
+                        "UPDATE jobs SET state='DONE', updated_at=?, claimed_by='groq_pr_engine',"
+                        " payload=?, result=? WHERE id=?",
+                        (
+                            utcnow(),
+                            json.dumps(task.as_dict()),
+                            json.dumps({
+                                "engine": "groq",
+                                "model": groq_res.get("model"),
+                                "pr_meta": pr_meta,
+                                "patch": task.patch,
+                            }),
+                            task.task_id,
+                        ),
+                    )
+
+                    # Update incident state to PR_OPENED with timeline evidence
+                    if task.incident_id:
+                        try:
+                            inc_row = self.db.query_one("SELECT * FROM incidents WHERE id=?", (task.incident_id,))
+                            if inc_row and inc_row["state"] != "RECOVERY_VERIFIED":
+                                now = utcnow()
+                                lc = json.loads(inc_row["lifecycle"]) if inc_row["lifecycle"] else []
+                                lc.append({
+                                    "ts": now,
+                                    "from": inc_row["state"],
+                                    "state": "PR_OPENED",
+                                    "actor": "groq_pr_engine",
+                                    "note": f"Groq ({groq_res.get('model')}) synthesized code fix and opened PR: {task.pull_request_url}",
+                                })
+                                ev = json.loads(inc_row["evidence"]) if inc_row["evidence"] else []
+                                ev.append({
+                                    "kind": "pr_patch",
+                                    "engine": "groq",
+                                    "model": groq_res.get("model"),
+                                    "pull_request_url": task.pull_request_url,
+                                    "patch": task.patch,
+                                    "ts": now,
+                                })
+                                self.db.execute(
+                                    "UPDATE incidents SET state='PR_OPENED', updated_at=?, lifecycle=?, evidence=? WHERE id=?",
+                                    (now, json.dumps(lc), json.dumps(ev), task.incident_id),
+                                )
+                        except Exception as ex:
+                            _LOG.warning("Failed to update incident on Groq PR: %s", ex)
+
+                    return {
+                        "success": True,
+                        "status": "PR_OPENED",
+                        "engine": "groq",
+                        "model": groq_res.get("model"),
+                        "task_id": task.task_id,
+                        "pull_request_url": task.pull_request_url,
+                        "patch": task.patch,
+                        "message": f"Autonomous code repair and PR generated via Groq ({groq_res.get('model')}): {task.pull_request_url}",
+                    }
+                else:
+                    err = groq_res.get("error", "Unknown Groq error")
+                    task.status = "QUEUED"
+                    self.db.execute(
+                        "UPDATE jobs SET state='QUEUED', updated_at=?, error=? WHERE id=?",
+                        (utcnow(), f"Groq PR engine: {err}", task.task_id),
+                    )
+                    return {
+                        "success": False,
+                        "status": groq_res.get("status", "FAILED"),
+                        "task_id": task.task_id,
+                        "error": err,
+                        "message": f"Groq PR Engine guarded: {err}",
+                    }
+
             task.status = "QUEUED"
             self.db.execute(
                 "UPDATE jobs SET state='QUEUED', updated_at=?, error=? WHERE id=?",
@@ -308,6 +430,19 @@ class DevinAdapter:
                 session_id = res_data.get("session_id") or res_data.get("id")
             except Exception:
                 pass
+
+        row_dict = dict(row)
+        if row_dict.get("claimed_by") == "groq_pr_engine" or payload.get("patch"):
+            return {
+                "task_id": task_id,
+                "configured": True,
+                "engine": "groq",
+                "status": "COMPLETED" if row["state"] in ("DONE", "COMPLETED") else row["state"],
+                "devin_session_id": session_id,
+                "patch": payload.get("patch"),
+                "pull_request_url": payload.get("pull_request_url"),
+                "message": "PR code fix and unified diff synthesized by Groq PR engine.",
+            }
 
         if not self.api_key:
             return {

@@ -332,6 +332,7 @@ class DockerAdapter:
         """Redacts tokens, credentials, and sensitive environment keys."""
         # Redact common token and credential patterns
         sanitized = re.sub(r"(AIzaSy[A-Za-z0-9_-]{33})", "[REDACTED_GEMINI_KEY]", text)
+        sanitized = re.sub(r"(gsk_[A-Za-z0-9_-]{30,})", "[REDACTED_GROQ_KEY]", sanitized)
         sanitized = re.sub(r"(gh[pousr]_[A-Za-z0-9_]{30,})", "[REDACTED_GITHUB_TOKEN]", sanitized)
         sanitized = re.sub(r"(bearer\s+)[A-Za-z0-9\._\-]+", r"\1[REDACTED_BEARER]", sanitized, flags=re.I)
         return sanitized

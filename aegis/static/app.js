@@ -26,6 +26,10 @@ const fmtRelative = (ts) => {
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   return `${Math.floor(diff / 3600)}h ago`;
 };
+const escapeHtml = (str) => {
+  if (!str) return "";
+  return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+};
 
 // Global State
 let chartData = { ts: [], cpu_percent: [], mem_percent: [] };
@@ -1129,13 +1133,19 @@ async function selectIncident(iid) {
     let diag = null;
     let devinPrUrl = null;
     let devinTaskId = null;
+    let prPatch = null;
+    let prEngine = null;
+    let prModel = null;
     let verificationDetail = null;
 
     for (const ev of evList) {
       if (ev.kind === "ai_diagnosis") {
         diag = ev.detail || ev.result;
-      } else if (ev.kind === "github_pr" || ev.kind === "devin_pr") {
-        devinPrUrl = ev.pr_url;
+      } else if (ev.kind === "github_pr" || ev.kind === "devin_pr" || ev.kind === "pr_patch") {
+        devinPrUrl = ev.pr_url || ev.pull_request_url;
+        if (ev.patch) prPatch = ev.patch;
+        if (ev.engine) prEngine = ev.engine;
+        if (ev.model) prModel = ev.model;
       } else if (ev.kind === "closed_loop_verification") {
         verificationDetail = ev;
       }
@@ -1267,10 +1277,15 @@ async function selectIncident(iid) {
               ${isHardware ? `
                 Autonomous action verified: cluster instances scaled or idle weights evicted. Hardware compute pressure distributed across nodes.
               ` : (devinPrUrl ? `
-                <div class="flex items-center gap-8">
+                <div class="flex items-center gap-8 mb-8" style="flex-wrap:wrap;">
                   <span>Pull Request published:</span>
                   <a href="${devinPrUrl}" target="_blank" class="badge info" style="text-decoration:none;">${devinPrUrl} ↗</a>
+                  ${prEngine ? `<span class="badge" style="background:rgba(249,115,22,0.18); color:#f97316; border:1px solid rgba(249,115,22,0.3);">⚡ Engine: ${prEngine.toUpperCase()} (${prModel || 'llama-3.1-8b-instant'})</span>` : ''}
                 </div>
+                ${prPatch ? `
+                  <div class="text-xs text-muted mb-4"><strong>Synthesized Unified Diff Patch:</strong></div>
+                  <pre class="log-box" style="max-height:160px; color:#4ade80; background:#0d1117; font-size:11px; white-space:pre-wrap; border:1px solid rgba(74,222,128,0.2);">${escapeHtml(prPatch)}</pre>
+                ` : ''}
               ` : 'Pull request branch generation and remote Git publication.')}
             </div>
           </div>
@@ -1360,7 +1375,7 @@ $("runDiagBtn")?.addEventListener("click", async () => {
 
 $("delegateDevinBtn")?.addEventListener("click", async () => {
   if (!activeIncidentId) return;
-  $("delegateDevinBtn").textContent = "Delegating…";
+  $("delegateDevinBtn").textContent = "Synthesizing Fix…";
   try {
     const task = await (await fetch("/api/devin/tasks", {
       method: "POST",
@@ -1374,14 +1389,17 @@ $("delegateDevinBtn")?.addEventListener("click", async () => {
 
     if (disp.session_id) {
       showToast(`Dispatched to Devin! Session ID: ${disp.session_id}`, "ok");
+    } else if (disp.pull_request_url) {
+      showToast(`⚡ PR Generated via ${disp.engine ? disp.engine.toUpperCase() : 'Engine'} (${disp.model || ''}): ${disp.pull_request_url}`, "ok");
     } else {
-      showToast(disp.message || "Task queued for Devin", "info");
+      showToast(disp.message || "Task queued for repair", "info");
     }
     selectIncident(activeIncidentId);
+    refreshIncidents();
   } catch (e) {
-    showToast(`Devin error: ${e}`, "crit");
+    showToast(`Repair error: ${e}`, "crit");
   } finally {
-    $("delegateDevinBtn").textContent = "Delegate to Devin";
+    $("delegateDevinBtn").textContent = "Autonomous Repair (Devin/Groq)";
   }
 });
 
