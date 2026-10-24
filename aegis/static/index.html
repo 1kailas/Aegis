@@ -18,41 +18,42 @@
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
     </svg>
     <span class="brand-name">Aegis AI</span>
-    <span class="brand-ver">v3.2.0</span>
+    <span class="brand-sub-badge">Autonomous On-Call</span>
   </a>
 
   <nav class="topbar-nav" id="navTabs">
-    <button class="nav-btn active" data-tab="overview">Production Monitor</button>
+    <button class="nav-btn active" data-tab="overview">
+      <span>📊</span> Production Monitor
+    </button>
     <button class="nav-btn" data-tab="causality" id="navBtnCausality">
-      🌐 Service Topology
+      <span>🌐</span> Service Topology
       <span class="nav-count crit" id="causalityTabBadge" style="display:none">1</span>
     </button>
     <button class="nav-btn" data-tab="incidents">
-      🚨 Outages &amp; Auto-PR
+      <span>🚨</span> Outages &amp; Auto-PR
       <span class="nav-count" id="incTabBadge" style="display:none">0</span>
     </button>
   </nav>
 
   <div class="topbar-right">
-    <input type="text" class="search-input" id="globalSearch" placeholder="Search... (/)" style="width:130px;" autocomplete="off">
-
-    <div class="ping-chip" title="Control plane roundtrip latency">
-      <span class="ping-dot" id="pingDot"></span>
-      <span id="pingVal">–</span>
+    <div class="status-indicator-pill" id="systemStatusPill">
+      <span class="status-dot ok" id="systemStatusDot"></span>
+      <span id="systemStatusText" style="font-size:12px; font-weight:500;">All Systems Operational</span>
     </div>
 
-    <a href="/documentation" class="btn sm" title="Complete Documentation Portal">Docs</a>
-    <button class="btn sm" id="cliDocsBtn" title="CLI Quick Reference [?]">CLI</button>
+    <a href="http://127.0.0.1:5050" target="_blank" class="btn sm ok" style="text-decoration:none;">Demo Store (5050) ↗</a>
 
-    <div class="mode-toggle-wrap" title="Autonomous policy mode">
-      <label class="toggle">
-        <input type="checkbox" id="modeToggle">
-        <span class="toggle-track"></span>
-      </label>
-      <span class="mode-label" id="modeLabel">monitoring</span>
+    <!-- Hidden compatibility elements for background scripts -->
+    <div style="display:none;">
+      <input type="text" id="globalSearch">
+      <span id="pingDot"></span><span id="pingVal"></span>
+      <input type="checkbox" id="modeToggle">
+      <span id="modeLabel"></span>
+      <button id="estopBtn"></button>
+      <button id="cliDocsBtn"></button>
+      <span id="softModelDot"></span>
+      <span id="softModelBadge"></span>
     </div>
-
-    <button id="estopBtn" class="btn danger sm" title="Global emergency stop — blocks autonomous interventions">E-STOP</button>
   </div>
 </header>
 
@@ -63,35 +64,55 @@
 ═══════════════════════════════════════════════════════════ -->
 <section class="tab-content active" id="tab-overview">
 
-  <!-- Live Production Control Toolbar -->
-  <div class="demo-actions-bar">
-    <div class="flex items-center gap-12">
-      <span class="badge ok" style="letter-spacing:0.5px;">ON-CALL AGENT</span>
-      <span style="font-size:13px; font-weight:600; color:var(--text-primary);">Autonomous Zero-Touch Outage Triage &amp; Auto-PR</span>
-    </div>
-    <div class="demo-btn-group">
-      <button class="btn sm primary" id="btnOpenConnectTarget">+ Connect Website</button>
-      <button class="btn sm warn" id="btnTriggerTargetBug" title="Simulates a real 500 error in demo target app">💥 Simulate 500 Outage</button>
-      <button class="btn sm primary" id="btnOpenCausalityView" title="View Kea-Style Service Topology & Causality Graph">🌐 Service Topology</button>
-      <button class="btn sm danger" id="btnTestSafety" title="Submits 'rm -rf /' to verify deterministic 403 rejection">🛡️ Safety Test (403)</button>
-    </div>
-  </div>
-
-  <!-- Autonomous On-Call Architecture Banner -->
-  <div class="panel" style="margin-bottom:16px; background:linear-gradient(135deg, rgba(20,24,35,0.85) 0%, rgba(13,16,24,0.95) 100%); border:1px solid rgba(255,255,255,0.08);">
-    <div style="padding:14px 20px; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px;">
-      <div style="max-width:700px;">
-        <div class="flex items-center gap-10" style="margin-bottom:6px;">
-          <span class="status-dot ok" id="softModelDot"></span>
-          <span style="font-size:14px; font-weight:700; color:var(--text-primary);">Autonomous On-Call Engineer (Gemini + Groq Llama-3.1)</span>
-          <span class="badge" style="background:rgba(56,189,248,0.15); color:#38bdf8;" id="softModelBadge">Gemini 2.5 Flash</span>
-        </div>
-        <div style="font-size:12px; color:var(--text-secondary); line-height:1.5;">
-          Monitors live production targets over HTTP every 5s. When an endpoint crashes or reports an unhandled exception, Aegis ingests the error traceback, visualizes root causality across dependencies, and synthesizes an autonomous Pull Request with closed-loop live verification.
-        </div>
+  <!-- Interactive Live Demo Walkthrough (Beginner-Friendly & Highly Visual) -->
+  <div class="walkthrough-panel">
+    <div class="walkthrough-header">
+      <div class="flex items-center gap-10">
+        <span class="live-pulse-dot"></span>
+        <span class="walkthrough-title">Live Demonstration Guide</span>
+        <span class="badge ok">Autonomous On-Call Engine Active</span>
       </div>
       <div class="flex items-center gap-10">
-        <a href="http://127.0.0.1:5050" target="_blank" class="btn sm ok" style="text-decoration:none;">Open Live Storefront (5050) ↗</a>
+        <button class="btn sm primary" id="btnOpenConnectTarget">+ Connect Website</button>
+        <button class="btn sm danger" id="btnTestSafety" title="Demonstrates deterministic guardian 403 block">🛡️ Safety Test (403)</button>
+      </div>
+    </div>
+
+    <div class="walkthrough-steps">
+      <!-- Step 1 -->
+      <div class="step-card" id="stepCard1">
+        <div class="step-badge">STEP 1 · LIVE TARGET</div>
+        <div class="step-title">Webliz Storefront</div>
+        <div class="step-desc">Active e-commerce website monitored every 5s over HTTP.</div>
+        <div class="step-action">
+          <a href="http://127.0.0.1:5050" target="_blank" class="btn sm ok" style="text-decoration:none;">Open Live Store (5050) ↗</a>
+        </div>
+      </div>
+
+      <!-- Arrow -->
+      <div class="step-arrow">➔</div>
+
+      <!-- Step 2 -->
+      <div class="step-card warn" id="stepCard2">
+        <div class="step-badge warn">STEP 2 · CRASH SITE</div>
+        <div class="step-title">Inject 500 Outage</div>
+        <div class="step-desc">Simulates real checkout crash with ZeroDivisionError.</div>
+        <div class="step-action">
+          <button class="btn sm warn" id="btnTriggerTargetBug">💥 Simulate 500 Outage</button>
+        </div>
+      </div>
+
+      <!-- Arrow -->
+      <div class="step-arrow">➔</div>
+
+      <!-- Step 3 -->
+      <div class="step-card ok" id="stepCard3">
+        <div class="step-badge ok">STEP 3 · AUTO-PR</div>
+        <div class="step-title">Synthesize &amp; Verify</div>
+        <div class="step-desc">Aegis writes code fix, opens GitHub PR &amp; verifies recovery.</div>
+        <div class="step-action">
+          <button class="btn sm primary" id="btnOpenCausalityView">🌐 View Topology &amp; PR</button>
+        </div>
       </div>
     </div>
   </div>

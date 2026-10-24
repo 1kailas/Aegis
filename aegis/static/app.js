@@ -232,10 +232,13 @@ function renderHealth(snap) {
     estop.textContent = "E-STOP";
   }
 
-  // Active Incidents Banner
+  // Active Incidents Banner & Top Status Indicator
   const incs = snap.active_incidents || [];
   const b = $("incidentBanner");
   const incTab = $("incTabBadge");
+  const sysDot = $("systemStatusDot");
+  const sysText = $("systemStatusText");
+
   if (incs.length > 0) {
     b.classList.add("visible");
     $("incidentBannerText").textContent = `${incs.length} active outage${incs.length > 1 ? "s" : ""} detected — Autonomous PR engine engaged`;
@@ -245,6 +248,10 @@ function renderHealth(snap) {
       $("prodOutagesVal").className = "metric-val crit";
       $("prodOutagesSub").textContent = "Auto-Repair in Progress";
     }
+    if (sysDot && sysText) {
+      sysDot.className = "status-dot crit";
+      sysText.textContent = `${incs.length} Outage Active — Auto-PR Engaged`;
+    }
   } else {
     b.classList.remove("visible");
     if (incTab) incTab.style.display = "none";
@@ -252,6 +259,10 @@ function renderHealth(snap) {
       $("prodOutagesVal").textContent = "0 Outages";
       $("prodOutagesVal").className = "metric-val ok";
       $("prodOutagesSub").textContent = "Normal Operations";
+    }
+    if (sysDot && sysText) {
+      sysDot.className = "status-dot ok";
+      sysText.textContent = "All Systems Operational";
     }
   }
 }
