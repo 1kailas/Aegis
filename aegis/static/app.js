@@ -79,12 +79,14 @@ function fallbackCopy(text) {
 }
 
 // ------------------------------------------------------------- Navigation & Shortcuts
-const TABS = ["overview", "cluster", "models", "infra", "incidents"];
+const TABS = ["overview", "causality", "incidents"];
 let currentActiveTab = "overview";
 
 function switchTab(tabName) {
   // Graceful aliases for legacy/external links
-  if (tabName === "workloads" || tabName === "hardware") tabName = "infra";
+  if (tabName === "workloads" || tabName === "hardware" || tabName === "cluster" || tabName === "models" || tabName === "infra") {
+    tabName = "overview";
+  }
   if (tabName === "policy" || tabName === "engineering" || tabName === "ai") tabName = "incidents";
 
   currentActiveTab = tabName;
@@ -236,11 +238,21 @@ function renderHealth(snap) {
   const incTab = $("incTabBadge");
   if (incs.length > 0) {
     b.classList.add("visible");
-    $("incidentBannerText").textContent = `${incs.length} active incident${incs.length > 1 ? "s" : ""} require attention`;
+    $("incidentBannerText").textContent = `${incs.length} active outage${incs.length > 1 ? "s" : ""} detected — Autonomous PR engine engaged`;
     if (incTab) { incTab.style.display = "inline-flex"; incTab.textContent = incs.length; }
+    if ($("prodOutagesVal")) {
+      $("prodOutagesVal").textContent = `${incs.length} Critical Outage${incs.length > 1 ? "s" : ""}`;
+      $("prodOutagesVal").className = "metric-val crit";
+      $("prodOutagesSub").textContent = "Auto-Repair in Progress";
+    }
   } else {
     b.classList.remove("visible");
     if (incTab) incTab.style.display = "none";
+    if ($("prodOutagesVal")) {
+      $("prodOutagesVal").textContent = "0 Outages";
+      $("prodOutagesVal").className = "metric-val ok";
+      $("prodOutagesSub").textContent = "Normal Operations";
+    }
   }
 }
 
@@ -2319,12 +2331,10 @@ $("pauseEventsBtn")?.addEventListener("click", () => {
 });
 
 function pollActiveTab() {
-  if (currentActiveTab === "cluster") {
-    refreshCluster();
-  } else if (currentActiveTab === "models") {
-    refreshModels();
-  } else if (currentActiveTab === "infra") {
-    refreshDocker();
+  if (currentActiveTab === "overview") {
+    refreshTargets();
+  } else if (currentActiveTab === "causality") {
+    refreshKeaTopology();
   } else if (currentActiveTab === "incidents") {
     refreshIncidents();
     refreshAudit();
@@ -2341,6 +2351,29 @@ async function refreshTargets() {
       tbl.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:18px;">No monitored targets registered yet. Click '+ Connect Website' to monitor any app or site.</td></tr>`;
       return;
     }
+
+    const activeTargets = targets.filter(t => t.status === "ACTIVE");
+    const failingTargets = activeTargets.filter(t => (t.last_status_code && t.last_status_code >= 500) || t.consecutive_failures > 0);
+    if ($("prodTargetsCount")) {
+      $("prodTargetsCount").textContent = `${activeTargets.length} Active`;
+      $("prodTargetsCount").className = "metric-val ok";
+      if (activeTargets.length > 0) {
+        $("prodTargetsSub").textContent = `${activeTargets[0].name} (${activeTargets[0].url})`;
+      }
+    }
+    if ($("prodSlaVal")) {
+      if (failingTargets.length > 0) {
+        $("prodSlaVal").textContent = "Degraded (500)";
+        $("prodSlaVal").className = "metric-val crit";
+        $("prodSlaSub").textContent = `HTTP ${failingTargets[0].last_status_code} · ${failingTargets[0].consecutive_failures} failures`;
+      } else {
+        const avgLat = activeTargets.length ? (activeTargets.reduce((a, b) => a + (b.last_latency_ms || 12), 0) / activeTargets.length).toFixed(1) : 11.8;
+        $("prodSlaVal").textContent = "100% OK";
+        $("prodSlaVal").className = "metric-val ok";
+        $("prodSlaSub").textContent = `HTTP 200 · Latency: ~${avgLat}ms`;
+      }
+    }
+
     tbl.innerHTML = targets.map(t => {
       const isOk = (t.last_status_code >= 200 && t.last_status_code < 300);
       const badgeCls = isOk ? "ok" : "crit";

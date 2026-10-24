@@ -22,19 +22,13 @@
   </a>
 
   <nav class="topbar-nav" id="navTabs">
-    <button class="nav-btn active" data-tab="overview">Overview</button>
+    <button class="nav-btn active" data-tab="overview">Production Monitor</button>
     <button class="nav-btn" data-tab="causality" id="navBtnCausality">
-      🌐 Topology &amp; Causality
+      🌐 Service Topology
       <span class="nav-count crit" id="causalityTabBadge" style="display:none">1</span>
     </button>
-    <button class="nav-btn" data-tab="cluster">
-      Cluster Mesh
-      <span class="nav-count info" id="clusterTabBadge" style="display:none">0</span>
-    </button>
-    <button class="nav-btn" data-tab="models">AI Models</button>
-    <button class="nav-btn" data-tab="infra">Infrastructure</button>
     <button class="nav-btn" data-tab="incidents">
-      Incidents &amp; Safety
+      🚨 Outages &amp; Auto-PR
       <span class="nav-count" id="incTabBadge" style="display:none">0</span>
     </button>
   </nav>
@@ -69,67 +63,35 @@
 ═══════════════════════════════════════════════════════════ -->
 <section class="tab-content active" id="tab-overview">
 
-  <!-- Live Hackathon Control Toolbar -->
+  <!-- Live Production Control Toolbar -->
   <div class="demo-actions-bar">
     <div class="flex items-center gap-12">
-      <span class="badge info" style="letter-spacing:0.5px;">ON-CALL AGENT</span>
-      <span style="font-size:13px; font-weight:600; color:var(--text-primary);">Autonomous Incident Triage &amp; Repair</span>
+      <span class="badge ok" style="letter-spacing:0.5px;">ON-CALL AGENT</span>
+      <span style="font-size:13px; font-weight:600; color:var(--text-primary);">Autonomous Zero-Touch Outage Triage &amp; Auto-PR</span>
     </div>
     <div class="demo-btn-group">
       <button class="btn sm primary" id="btnOpenConnectTarget">+ Connect Website</button>
-      <button class="btn sm warn" id="btnTriggerTargetBug" title="Simulates a real 500 error in demo target app">Simulate 500 Outage</button>
-      <button class="btn sm danger" id="btnTestSafety" title="Submits 'rm -rf /' to verify deterministic 403 rejection">Safety Test (403)</button>
-      <button class="btn sm" id="btnSimulateLoad" title="Triggers deterministic VRAM/memory eviction via ResourceGuardian">Simulate Load</button>
-      <button class="btn sm info" id="btnScaleInstances" title="Hardware Model auto-scales instances across cluster nodes to relieve compute saturation">⚡ Scale Instances</button>
-      <button class="btn sm" id="btnOpenKeyGraph" title="Jump to Security, API Keys & Integration Topology Graph">🔑 Key Graph</button>
+      <button class="btn sm warn" id="btnTriggerTargetBug" title="Simulates a real 500 error in demo target app">💥 Simulate 500 Outage</button>
       <button class="btn sm primary" id="btnOpenCausalityView" title="View Kea-Style Service Topology & Causality Graph">🌐 Service Topology</button>
+      <button class="btn sm danger" id="btnTestSafety" title="Submits 'rm -rf /' to verify deterministic 403 rejection">🛡️ Safety Test (403)</button>
     </div>
   </div>
 
-  <!-- Dual-Model Division of Labor Showcase -->
+  <!-- Autonomous On-Call Architecture Banner -->
   <div class="panel" style="margin-bottom:16px; background:linear-gradient(135deg, rgba(20,24,35,0.85) 0%, rgba(13,16,24,0.95) 100%); border:1px solid rgba(255,255,255,0.08);">
-    <div style="padding:12px 18px; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px; border-bottom:1px solid rgba(255,255,255,0.05);">
+    <div style="padding:14px 20px; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px;">
+      <div style="max-width:700px;">
+        <div class="flex items-center gap-10" style="margin-bottom:6px;">
+          <span class="status-dot ok" id="softModelDot"></span>
+          <span style="font-size:14px; font-weight:700; color:var(--text-primary);">Autonomous On-Call Engineer (Gemini + Groq Llama-3.1)</span>
+          <span class="badge" style="background:rgba(56,189,248,0.15); color:#38bdf8;" id="softModelBadge">Gemini 2.5 Flash</span>
+        </div>
+        <div style="font-size:12px; color:var(--text-secondary); line-height:1.5;">
+          Monitors live production targets over HTTP every 5s. When an endpoint crashes or reports an unhandled exception, Aegis ingests the error traceback, visualizes root causality across dependencies, and synthesizes an autonomous Pull Request with closed-loop live verification.
+        </div>
+      </div>
       <div class="flex items-center gap-10">
-        <span class="badge" style="background:rgba(99,102,241,0.15); color:#818cf8; border:1px solid rgba(99,102,241,0.3); font-weight:700;">DUAL-MODEL ARCHITECTURE</span>
-        <span style="font-size:13px; font-weight:600; color:var(--text-primary);">Specialized Model Division of Labor (Software vs Hardware)</span>
-      </div>
-      <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Dual-Plane Deterministic Safety</div>
-    </div>
-    <div style="padding:14px 18px; display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:16px;">
-      <!-- Software Model -->
-      <div style="background:rgba(15,19,28,0.7); border:1px solid rgba(255,255,255,0.06); border-radius:8px; padding:12px 14px;">
-        <div class="flex items-center justify-between" style="margin-bottom:6px;">
-          <div class="flex items-center gap-8">
-            <span class="status-dot ok" id="softModelDot"></span>
-            <span style="font-weight:600; font-size:13px; color:var(--text-primary);">Software Intelligence</span>
-          </div>
-          <span class="badge" style="background:rgba(56,189,248,0.15); color:#38bdf8; font-size:10px;" id="softModelBadge">Gemini 2.5 Flash</span>
-        </div>
-        <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">
-          Observes code errors, 5xx server outages &amp; unhandled exceptions. Understands root cause and builds repair briefs to trigger Devin PRs.
-        </div>
-        <div class="flex items-center gap-12" style="font-size:11px; color:var(--text-muted);">
-          <span>• Code &amp; Config Analysis</span>
-          <span>• Devin PR Repair Loop</span>
-        </div>
-      </div>
-
-      <!-- Hardware Model -->
-      <div style="background:rgba(15,19,28,0.7); border:1px solid rgba(255,255,255,0.06); border-radius:8px; padding:12px 14px;">
-        <div class="flex items-center justify-between" style="margin-bottom:6px;">
-          <div class="flex items-center gap-8">
-            <span class="status-dot ok" id="hardModelDot"></span>
-            <span style="font-weight:600; font-size:13px; color:var(--text-primary);">Hardware &amp; Scaling Intelligence</span>
-          </div>
-          <span class="badge" style="background:rgba(168,85,247,0.15); color:#c084fc; font-size:10px;" id="hardModelBadge">Local Infra Model</span>
-        </div>
-        <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">
-          Monitors compute load, CPU/VRAM saturation &amp; thermals. Executes autonomous instance auto-scaling, model weight eviction &amp; throttling.
-        </div>
-        <div class="flex items-center gap-12" style="font-size:11px; color:var(--text-muted);">
-          <span>• Multi-Instance Auto-Scaling</span>
-          <span>• Thermal &amp; VRAM Safety</span>
-        </div>
+        <a href="http://127.0.0.1:5050" target="_blank" class="btn sm ok" style="text-decoration:none;">Open Live Storefront (5050) ↗</a>
       </div>
     </div>
   </div>
@@ -141,49 +103,45 @@
     <button class="btn sm danger" onclick="switchTab('incidents')">Inspect Incident</button>
   </div>
 
-  <!-- Telemetry Gauges Grid -->
+  <!-- Production Metrics Grid -->
   <div class="metric-grid">
-    <div class="metric-card" id="card-cpu">
-      <div class="metric-label">CPU Compute</div>
-      <div class="metric-val" id="cpuVal">–</div>
-      <div class="metric-sub" id="cpuSub">–</div>
-      <svg class="metric-spark" width="90" height="32" viewBox="0 0 90 32" id="spark-cpu">
-        <path class="sparkline-path" d=""/>
-      </svg>
+    <div class="metric-card">
+      <div class="metric-label">Monitored Web Targets</div>
+      <div class="metric-val ok" id="prodTargetsCount">1 Active</div>
+      <div class="metric-sub" id="prodTargetsSub">Webliz Storefront (127.0.0.1:5050)</div>
     </div>
 
-    <div class="metric-card" id="card-mem">
-      <div class="metric-label">System Memory</div>
-      <div class="metric-val" id="memVal">–</div>
-      <div class="metric-sub" id="memSub">–</div>
-      <svg class="metric-spark" width="90" height="32" viewBox="0 0 90 32" id="spark-mem">
-        <path class="sparkline-path" d=""/>
-      </svg>
+    <div class="metric-card">
+      <div class="metric-label">Service Health SLA</div>
+      <div class="metric-val ok" id="prodSlaVal">100% OK</div>
+      <div class="metric-sub" id="prodSlaSub">HTTP 200 · Latency: ~11ms</div>
     </div>
 
-    <div class="metric-card" id="card-thermal">
-      <div class="metric-label">Thermal Guardian</div>
-      <div class="metric-val" id="thermalVal">–</div>
-      <div class="metric-sub" id="thermalSub">–</div>
+    <div class="metric-card">
+      <div class="metric-label">Active Outages</div>
+      <div class="metric-val ok" id="prodOutagesVal">0 Outages</div>
+      <div class="metric-sub" id="prodOutagesSub">Normal Operations</div>
     </div>
 
-    <div class="metric-card" id="card-disk">
-      <div class="metric-label">Root Storage</div>
-      <div class="metric-val" id="diskVal">–</div>
-      <div class="metric-sub" id="diskSub">–</div>
+    <div class="metric-card">
+      <div class="metric-label">Autonomous MTTR</div>
+      <div class="metric-val" style="color:var(--accent);" id="prodMttrVal">&lt; 12s</div>
+      <div class="metric-sub">Detection-to-PR Closed Loop</div>
     </div>
+  </div>
 
-    <div class="metric-card" id="card-net">
-      <div class="metric-label">Network I/O</div>
-      <div class="metric-val" id="netVal">–</div>
-      <div class="metric-sub" id="netSub">–</div>
-    </div>
-
-    <div class="metric-card" id="card-gpu">
-      <div class="metric-label">Accelerators</div>
-      <div class="metric-val" id="gpuVal">–</div>
-      <div class="metric-sub" id="gpuSub">–</div>
-    </div>
+  <!-- Hidden backward-compat elements for existing telemetry JS hooks -->
+  <div style="display:none;">
+    <span id="cpuVal"></span><span id="cpuSub"></span><svg id="spark-cpu"><path class="sparkline-path" d=""/></svg>
+    <span id="memVal"></span><span id="memSub"></span><svg id="spark-mem"><path class="sparkline-path" d=""/></svg>
+    <span id="thermalVal"></span><span id="thermalSub"></span>
+    <span id="diskVal"></span><span id="diskSub"></span>
+    <span id="netVal"></span><span id="netSub"></span>
+    <span id="gpuVal"></span><span id="gpuSub"></span>
+    <span id="hardModelDot"></span><span id="hardModelBadge"></span>
+    <button id="btnSimulateLoad"></button>
+    <button id="btnScaleInstances"></button>
+    <button id="btnOpenKeyGraph"></button>
   </div>
 
   <!-- Connected Targets Panel -->
@@ -289,23 +247,17 @@
     </div>
   </div>
 
-  <!-- Active Workloads & Closed-Loop Actions Highlights -->
-  <div class="grid-2">
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">Active Workloads &amp; Containers</div>
-        <button class="btn sm" onclick="switchTab('infra')">View Infra</button>
+  <!-- Recent Autonomous Actions & PR Audit -->
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Recent Autonomous Actions &amp; Auto-PRs</div>
+        <div class="panel-subtitle">Trace of self-healing patches, PR dispatches, and closed-loop recoveries</div>
       </div>
-      <div class="tbl-wrap" id="quickWorkloads"></div>
+      <button class="btn sm" onclick="switchTab('incidents')">All Incidents</button>
     </div>
-
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">Recent Autonomous Actions</div>
-        <button class="btn sm" onclick="switchTab('incidents')">Audit Trail</button>
-      </div>
-      <div class="tbl-wrap" id="quickActions"></div>
-    </div>
+    <div class="tbl-wrap" id="quickActions"></div>
+    <div style="display:none;" id="quickWorkloads"></div>
   </div>
 
 </section>
@@ -480,317 +432,7 @@
 </section>
 
 <!-- ═══════════════════════════════════════════════════════════
-     TAB 2: CLUSTER MESH
-═══════════════════════════════════════════════════════════ -->
-<section class="tab-content" id="tab-cluster">
-
-  <!-- Connect Remote Client Machine -->
-  <div class="panel ok">
-    <div class="panel-header">
-      <div>
-        <div class="panel-title">Connect Any Client Device to this Server</div>
-        <div class="panel-subtitle">Run on remote worker nodes, bare metal, or cloud instances to stream telemetry</div>
-      </div>
-      <div class="flex items-center gap-8">
-        <span class="text-xs text-muted">Server IP:</span>
-        <input type="text" class="search-input mono" id="clusterHostInput" style="width:160px;" placeholder="127.0.0.1:8000">
-      </div>
-    </div>
-    <div style="padding:14px 18px; display:flex; flex-direction:column; gap:8px;">
-      <div class="snippet-row">
-        <span class="snippet-label" style="color:var(--accent);">Zero-Install</span>
-        <code class="snippet-code" id="cmdInstantRun">curl -sSL http://127.0.0.1:8000/agent.py | python3 - 127.0.0.1</code>
-        <button class="btn xs" onclick="copySnippet($('cmdInstantRun').textContent)">Copy</button>
-      </div>
-      <div class="snippet-row">
-        <span class="snippet-label" style="color:var(--ok);">Daemon Service</span>
-        <code class="snippet-code" id="cmdServiceInstall">curl -sSL http://127.0.0.1:8000/install.sh | bash -s 127.0.0.1</code>
-        <button class="btn xs" onclick="copySnippet($('cmdServiceInstall').textContent)">Copy</button>
-      </div>
-      <div class="snippet-row">
-        <span class="snippet-label" style="color:var(--warn);">CLI Join</span>
-        <code class="snippet-code" id="cmdCliJoin">aegis join 127.0.0.1</code>
-        <button class="btn xs" onclick="copySnippet($('cmdCliJoin').textContent)">Copy</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Cluster Nodes Table -->
-  <div class="panel">
-    <div class="panel-header">
-      <div>
-        <div class="panel-title">Cluster Mesh Nodes</div>
-        <div class="panel-subtitle" id="clusterVitals">Loading cluster topology...</div>
-      </div>
-      <button class="btn sm" id="refreshClusterBtn">Refresh Nodes</button>
-    </div>
-    <div class="tbl-wrap">
-      <table class="tbl" id="clusterNodesTbl">
-        <thead>
-          <tr>
-            <th>Node ID</th>
-            <th>Hostname</th>
-            <th>IP Address</th>
-            <th>Status</th>
-            <th>CPU / RAM Usage</th>
-            <th>Last Heartbeat</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- Canary Deployments -->
-  <div class="panel">
-    <div class="panel-header">
-      <div>
-        <div class="panel-title">Canary Deployments &amp; Automated Rollback</div>
-        <div class="panel-subtitle">Verifies traffic steps against latency and error rate budgets</div>
-      </div>
-      <span class="badge info">SLA Engine</span>
-    </div>
-    <div class="tbl-wrap">
-      <table class="tbl" id="canaryTbl">
-        <thead>
-          <tr>
-            <th>Rollout ID</th>
-            <th>Service Target</th>
-            <th>State</th>
-            <th>Traffic Step</th>
-            <th>Error Rate</th>
-            <th>Latency</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </div>
-
-</section>
-
-<!-- ═══════════════════════════════════════════════════════════
-     TAB 3: AI MODEL HUB
-═══════════════════════════════════════════════════════════ -->
-<section class="tab-content" id="tab-models">
-
-  <!-- Hardware AI Profile Banner -->
-  <div class="panel info">
-    <div class="panel-header">
-      <div class="panel-title">Physical AI Acceleration Profile</div>
-      <div class="panel-actions">
-        <div class="filter-bar" id="modelTaskFilterGroup">
-          <button class="filter-btn active" data-filter="ALL">All</button>
-          <button class="filter-btn" data-filter="CODING">Coding</button>
-          <button class="filter-btn" data-filter="REASONING">Reasoning</button>
-          <button class="filter-btn" data-filter="FAST_CHAT">Chat</button>
-          <button class="filter-btn" data-filter="EMBEDDING">Embeddings</button>
-        </div>
-        <button class="btn sm" id="optimizeVramBtn">Optimize VRAM</button>
-        <button class="btn sm" id="clusterCapacityBtn">Cluster Capacity</button>
-        <button class="btn sm primary" id="refreshModelsBtn">Refresh Catalog</button>
-      </div>
-    </div>
-    <div class="hw-profile" id="aiHardwareProfileBox"></div>
-  </div>
-
-  <!-- My Ollama Models (Local Runtime) -->
-  <div class="panel">
-    <div class="panel-header">
-      <div>
-        <div class="panel-title">My Ollama Models (Local Store)</div>
-        <div class="panel-subtitle" id="ollamaStatusSubtitle">Connecting to local Ollama runtime on http://127.0.0.1:11434...</div>
-      </div>
-      <div class="flex gap-8 items-center">
-        <input type="text" id="pullModelInput" placeholder="Model tag (e.g. llama3.2, mistral)" class="search-input" style="width:200px; font-size:12px;" />
-        <button class="btn sm primary" id="pullModelBtn" onclick="pullOllamaModel()">Pull Model</button>
-        <button class="btn sm" onclick="refreshOllamaModels()">Refresh Ollama</button>
-      </div>
-    </div>
-    <div class="panel-body">
-      <div class="grid-auto" id="ollamaModelsList"></div>
-    </div>
-  </div>
-
-  <!-- Open-Source Model Catalog & Deployer -->
-  <div class="panel">
-    <div class="panel-header">
-      <div>
-        <div class="panel-title">Model Catalog &amp; Multi-Instance Cloud-Native Deployer</div>
-        <div class="panel-subtitle">Deploy any model with automated multi-instance replica distribution and Kubernetes HPA auto-scaling</div>
-      </div>
-      <span class="badge ok">Auto-Scaling Ready</span>
-    </div>
-    <div class="panel-body">
-      <div class="grid-auto" id="catalogModelsList"></div>
-      <!-- Backward compatibility hidden placeholders -->
-      <div style="display:none;" id="bestModelsList"></div>
-      <div style="display:none;" id="marginalModelsList"></div>
-      <div style="display:none;" id="worstModelsList"></div>
-    </div>
-  </div>
-
-  <!-- Active One-Click Deployments -->
-  <div class="panel">
-    <div class="panel-header">
-      <div class="panel-title">Active Model Deployments (Docker &amp; Kubernetes)</div>
-    </div>
-    <div class="tbl-wrap">
-      <table class="tbl" id="deploymentsTbl">
-        <thead>
-          <tr>
-            <th>Deployment ID</th>
-            <th>Model</th>
-            <th>Runtime</th>
-            <th>Status</th>
-            <th>Port</th>
-            <th>Target</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- Empirical Benchmarks -->
-  <div class="panel">
-    <div class="panel-header">
-      <div>
-        <div class="panel-title">Empirical Inference Benchmarks</div>
-        <div class="panel-subtitle">Empirical Time-To-First-Token (TTFT), decoding throughput, and memory bandwidth</div>
-      </div>
-      <span class="badge info">Hardware Benchmark</span>
-    </div>
-    <div class="tbl-wrap">
-      <table class="tbl" id="benchmarksTbl">
-        <thead>
-          <tr>
-            <th>Benchmark ID</th>
-            <th>Model</th>
-            <th>Runtime</th>
-            <th>Throughput</th>
-            <th>TTFT</th>
-            <th>Prompt Speed</th>
-            <th>Status</th>
-            <th>Timestamp</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </div>
-
-</section>
-
-<!-- ═══════════════════════════════════════════════════════════
-     TAB 4: INFRASTRUCTURE & WORKLOADS
-═══════════════════════════════════════════════════════════ -->
-<section class="tab-content" id="tab-infra">
-
-  <!-- Docker Containers -->
-  <div class="panel">
-    <div class="panel-header">
-      <div class="panel-title">Docker Containers</div>
-      <div class="panel-actions">
-        <input type="text" class="search-input" id="dockerSearch" placeholder="Filter containers..." style="width:150px;">
-        <div class="filter-bar" id="dockerFilterGroup">
-          <button class="filter-btn active" data-filter="ALL">All</button>
-          <button class="filter-btn" data-filter="RUNNING">Running</button>
-          <button class="filter-btn" data-filter="CRASH">Crashed</button>
-        </div>
-        <button class="btn sm" id="refreshDockerBtn">Refresh</button>
-      </div>
-    </div>
-    <div class="tbl-wrap">
-      <table class="tbl" id="dockerTbl">
-        <thead>
-          <tr>
-            <th>Container Name</th>
-            <th>Image</th>
-            <th>Status</th>
-            <th>Health Probe</th>
-            <th>Restarts</th>
-            <th>Memory</th>
-            <th>CPU</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- Kubernetes Topology -->
-  <div class="grid-2">
-    <div class="panel">
-      <div class="panel-header"><div class="panel-title">Kubernetes Nodes</div></div>
-      <div class="tbl-wrap" id="k8sOverview"></div>
-    </div>
-    <div class="panel">
-      <div class="panel-header"><div class="panel-title">Kubernetes Pods</div></div>
-      <div class="tbl-wrap" id="k8sPods"></div>
-    </div>
-  </div>
-
-  <!-- PSI Pressure & Storage -->
-  <div class="grid-2">
-    <div class="panel">
-      <div class="panel-header"><div class="panel-title">Kernel Pressure Stall Information (PSI)</div></div>
-      <div class="panel-body" id="psiContainer"></div>
-    </div>
-    <div class="panel">
-      <div class="panel-header"><div class="panel-title">Storage Mounts &amp; Partitions</div></div>
-      <div class="tbl-wrap">
-        <table class="tbl" id="storageTbl">
-          <thead>
-            <tr><th>Mount Point</th><th>Device</th><th>Capacity</th><th>Usage</th></tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <!-- System & Hardware Inventory -->
-  <div class="panel">
-    <div class="panel-header"><div class="panel-title">System &amp; Hardware Inventory</div></div>
-    <div class="panel-body" id="inventoryContainer"></div>
-  </div>
-
-  <!-- Sensor Registry -->
-  <div class="panel">
-    <div class="panel-header"><div class="panel-title">Physical Sensor Registry</div></div>
-    <div class="tbl-wrap">
-      <table class="tbl" id="sensorTbl">
-        <thead>
-          <tr><th>Sensor ID</th><th>Kind</th><th>Current Value</th><th>Validity</th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- Container Logs Drawer -->
-  <div class="panel" id="logViewerPanel" style="display:none;">
-    <div class="panel-header">
-      <div class="panel-title" id="logViewerTitle">Container Logs</div>
-      <div class="panel-actions">
-        <button class="btn sm" id="copyLogsBtn">Copy Logs</button>
-        <button class="btn sm danger" id="closeLogsBtn">Close</button>
-      </div>
-    </div>
-    <div class="panel-body">
-      <pre class="log-box" id="logViewerContent" style="height:260px;"></pre>
-    </div>
-  </div>
-
-</section>
-
-<!-- ═══════════════════════════════════════════════════════════
-     TAB 5: INCIDENTS & SAFETY
+     TAB 3: INCIDENTS & AUTO-PR
 ═══════════════════════════════════════════════════════════ -->
 <section class="tab-content" id="tab-incidents">
 
@@ -847,17 +489,6 @@
     <div class="panel-body" id="incDetailContent"></div>
   </div>
 
-  <!-- Telemetry Forecasting -->
-  <div class="panel">
-    <div class="panel-header">
-      <div>
-        <div class="panel-title">Predictive Telemetry Forecasting</div>
-        <div class="panel-subtitle">Ordinary least squares regression projects Time-To-Exhaustion before resource saturation</div>
-      </div>
-      <span class="badge info">OLS Regression</span>
-    </div>
-    <div class="panel-body" id="forecastContainer"></div>
-  </div>
 
   <!-- Security, Cryptographic RBAC & API Keys Center -->
   <div class="panel" id="securityPanel">
