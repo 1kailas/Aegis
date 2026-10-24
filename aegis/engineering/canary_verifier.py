@@ -196,6 +196,50 @@ class CanaryVerificationEngine:
         self._persist_record(record)
         return record
 
+    def trigger_rollback(
+        self,
+        rollout_id: str,
+        reason: str = "Manual operator rollback",
+        rollback_fn: Callable[[], bool] | None = None,
+    ) -> CanaryRolloutRecord:
+        """Explicitly triggers an emergency rollback of a canary rollout."""
+        record = self._active_rollouts.get(rollout_id)
+        if not record:
+            row = self.db.query_one("SELECT * FROM canary_rollouts WHERE rollout_id=?", (rollout_id,))
+            if not row:
+                raise ValueError(f"Rollout '{rollout_id}' not found")
+            record = CanaryRolloutRecord(
+                rollout_id=row["rollout_id"],
+                target=row["target"],
+                state=CanaryState(row["state"]),
+                current_step=row["current_step"],
+                total_steps=row["total_steps"],
+                error_rate=row["error_rate"],
+                latency_ms=row["latency_ms"],
+                revert_trigger=row["revert_trigger"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
+            )
+            self._active_rollouts[rollout_id] = record
+
+        record.state = CanaryState.ROLLING_BACK
+        record.revert_trigger = reason
+        record.updated_at = utcnow()
+        self.events.emit(
+            "canary",
+            f"Emergency rollback triggered on {record.target}: {reason}",
+            "warning",
+        )
+        if rollback_fn:
+            try:
+                rollback_fn()
+            except Exception as e:
+                _LOG.error("Error executing rollback callback for %s: %s", rollout_id, e)
+
+        record.state = CanaryState.ROLLED_BACK
+        self._persist_record(record)
+        return record
+
     def _persist_record(self, record: CanaryRolloutRecord) -> None:
         self.db.execute(
             "UPDATE canary_rollouts SET state=?, current_step=?, error_rate=?,"

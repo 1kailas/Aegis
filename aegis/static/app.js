@@ -1,59 +1,178 @@
-/* Aegis AI Autonomous Operations Dashboard
- * Vanilla JS, zero external dependencies, live Canvas telemetry rendering,
- * and multi-view orchestration.
+/* Aegis AI — Production SRE Operations Dashboard
+ * Vanilla JS, zero dependencies, high-density telemetry, live SVG sparklines,
+ * interactive incident triage & cluster mesh management.
  */
 "use strict";
 
 const $ = (id) => document.getElementById(id);
 const fmtTime = (iso) => (iso ? new Date(iso).toLocaleTimeString() : "–");
-const fmtBytes = (b) => {
-  if (b === null || b === undefined) return "–";
-  const u = ["B/s", "KiB/s", "MiB/s", "GiB/s"];
-  let i = 0;
-  while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
-  return `${b.toFixed(1)} ${u[i]}`;
+const fmtRelative = (ts) => {
+  if (!ts) return "never";
+  const diff = Math.round((Date.now() - (typeof ts === "number" ? ts * 1000 : new Date(ts).getTime())) / 1000);
+  if (diff < 5) return "just now";
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  return `${Math.floor(diff / 3600)}h ago`;
 };
 
+// Global State
 let chartData = { ts: [], cpu_percent: [], mem_percent: [] };
+let cpuSparkHistory = [];
+let memSparkHistory = [];
 let activeIncidentId = null;
+let currentEventFilter = "ALL";
+let eventsPaused = false;
+let dockerFilter = "ALL";
+let incidentFilter = "ALL";
+let lastKnownHost = window.location.host || "127.0.0.1:8000";
 
-// ---------------------------------------------------------------- Tab Switching
+// ------------------------------------------------------------- Toast Feedback
+function showToast(msg, kind = "info") {
+  const c = $("toastContainer");
+  if (!c) return;
+  const t = document.createElement("div");
+  t.className = "toast";
+  const dotClass = kind === "ok" ? "dot-ok" : kind === "crit" ? "dot-crit" : "dot-warn";
+  t.innerHTML = `<span class="dot ${dotClass}"></span><span>${msg}</span>`;
+  c.appendChild(t);
+  setTimeout(() => {
+    t.style.opacity = "0";
+    setTimeout(() => t.remove(), 200);
+  }, 2400);
+}
+
+window.copySnippet = function(text) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast(`Copied to clipboard: ${text}`, "ok");
+    }).catch(() => fallbackCopy(text));
+  } else {
+    fallbackCopy(text);
+  }
+};
+
+function fallbackCopy(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand("copy");
+  ta.remove();
+  showToast(`Copied: ${text}`, "ok");
+}
+
+// ------------------------------------------------------------- Navigation & Shortcuts
+const TABS = ["overview", "cluster", "workloads", "incidents", "hardware", "ai", "engineering", "policy"];
+
+window.switchTab = function(tabName) {
+  document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+
+  const btn = document.querySelector(`.nav-btn[data-tab="${tabName}"]`);
+  if (btn) btn.classList.add("active");
+
+  const target = $(`tab-${tabName}`);
+  if (target) target.classList.add("active");
+
+  if (tabName === "cluster") refreshCluster();
+  if (tabName === "workloads") refreshDocker();
+  if (tabName === "incidents") refreshIncidents();
+  if (tabName === "ai") refreshAI();
+  if (tabName === "engineering") refreshDevin();
+  if (tabName === "policy") refreshAudit();
+  if (tabName === "hardware") pollSensors();
+};
+
 document.querySelectorAll(".nav-btn").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
-    document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-    btn.classList.add("active");
-    const target = $(`tab-${btn.dataset.tab}`);
-    if (target) target.classList.add("active");
-    // Trigger specific tab refreshes
-    if (btn.dataset.tab === "workloads") refreshDocker();
-    if (btn.dataset.tab === "ai") refreshAI();
-    if (btn.dataset.tab === "incidents") refreshIncidents();
-    if (btn.dataset.tab === "engineering") refreshDevin();
-    if (btn.dataset.tab === "cluster") refreshCluster();
-    if (btn.dataset.tab === "policy") refreshAudit();
-  });
+  btn.addEventListener("click", () => switchTab(btn.dataset.tab));
 });
+
+// Keyboard shortcuts
+window.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") {
+    if (e.key === "Escape") e.target.blur();
+    return;
+  }
+  if (e.key === "?") {
+    e.preventDefault();
+    $("cliModal").style.display = "flex";
+  } else if (e.key === "Escape") {
+    $("cliModal").style.display = "none";
+    if ($("logViewerPanel")) $("logViewerPanel").style.display = "none";
+    if ($("incidentDetailPanel")) $("incidentDetailPanel").style.display = "none";
+  } else if (e.key === "/") {
+    e.preventDefault();
+    $("globalSearch").focus();
+  } else if (e.key >= "1" && e.key <= "8") {
+    const idx = parseInt(e.key, 10) - 1;
+    if (TABS[idx]) switchTab(TABS[idx]);
+  }
+});
+
+$("cliDocsBtn").addEventListener("click", () => { $("cliModal").style.display = "flex"; });
+$("closeCliModalBtn").addEventListener("click", () => { $("cliModal").style.display = "none"; });
+
+// ------------------------------------------------------------- Live Ping & Health Meter
+async function measurePing() {
+  const t0 = performance.now();
+  try {
+    const res = await fetch("/api/health");
+    const t1 = performance.now();
+    const lat = Math.round(t1 - t0);
+    const meter = $("pingVal");
+    const dot = $("pingDot");
+    if (res.ok) {
+      meter.textContent = `${lat}ms`;
+      dot.className = lat > 150 ? "dot dot-warn" : "dot dot-ok";
+    } else {
+      meter.textContent = `HTTP ${res.status}`;
+      dot.className = "dot dot-crit";
+    }
+  } catch {
+    $("pingVal").textContent = "offline";
+    $("pingDot").className = "dot dot-crit";
+  }
+}
+
+// ------------------------------------------------------------- SVG Sparkline Generator
+function updateSparkline(svgId, dataPoints, warnThresh = 70, critThresh = 85) {
+  const svg = $(svgId);
+  if (!svg) return;
+  const path = svg.querySelector("path");
+  if (!path || dataPoints.length < 2) return;
+
+  const w = 90, h = 26;
+  const n = dataPoints.length;
+  const dx = w / (n - 1);
+
+  let d = "";
+  for (let i = 0; i < n; i++) {
+    const val = Math.max(0, Math.min(100, dataPoints[i] || 0));
+    const y = h - (val / 100) * (h - 4) - 2;
+    d += (i === 0 ? `M 0,${y.toFixed(1)}` : ` L ${(i * dx).toFixed(1)},${y.toFixed(1)}`);
+  }
+  path.setAttribute("d", d);
+
+  const lastVal = dataPoints[n - 1] || 0;
+  path.className = `sparkline-path ${lastVal >= critThresh ? "crit" : lastVal >= warnThresh ? "warn" : ""}`;
+}
 
 // ------------------------------------------------------------- Core Overview Polling
 async function pollOverview() {
+  measurePing();
   try {
     const snap = await (await fetch("/api/overview")).json();
     renderHealth(snap);
     renderCards(snap);
     renderThermal(snap);
     renderQuickSummaries(snap);
-    $("footNote").textContent =
-      `Host: ${snap.host.hostname} (${snap.host.platform}) · Engine: ${snap.engine_running ? "RUNNING" : "STOPPED"} · Interval: ${snap.collect_interval}s · DB: ${snap.db.path}`;
   } catch {
-    setHealth("crit", "API unreachable — retrying");
+    $("pingVal").textContent = "offline";
+    $("pingDot").className = "dot dot-crit";
   }
 }
 
 function renderHealth(snap) {
-  const isOk = snap.engine_running && snap.db.integrity === "ok";
-  setHealth(isOk ? "ok" : "warn", isOk ? "Autonomous Engine Active" : "Degraded");
-
   const modeTgl = $("modeToggle");
   modeTgl.checked = snap.mode === "policy_autonomous";
   $("modeLabel").textContent = snap.mode;
@@ -61,95 +180,142 @@ function renderHealth(snap) {
   const estop = $("estopBtn");
   if (snap.emergency_stop) {
     estop.classList.add("active");
-    estop.textContent = "Emergency Stop ENGAGED";
+    estop.innerHTML = "<span>E-STOP ACTIVE</span>";
   } else {
     estop.classList.remove("active");
-    estop.textContent = "Emergency Stop";
+    estop.innerHTML = "<span>E-STOP</span>";
   }
-}
 
-function setHealth(kind, txt) {
-  const h = $("health");
-  h.innerHTML = `<span class="dot dot-${kind}"></span><span>${txt}</span>`;
+  // Active Incidents Banner
+  const incs = snap.active_incidents || [];
+  const b = $("incidentBanner");
+  const incTab = $("incTabBadge");
+  if (incs.length > 0) {
+    b.style.display = "block";
+    b.innerHTML = `<strong>Attention:</strong> ${incs.length} active infrastructure incident(s) undergoing triage or repair. <button class="btn sm" onclick="switchTab('incidents')" style="margin-left:12px;">Open Incident Registry</button>`;
+    if (incTab) {
+      incTab.style.display = "inline-flex";
+      incTab.textContent = incs.length;
+    }
+  } else {
+    b.style.display = "none";
+    if (incTab) incTab.style.display = "none";
+  }
 }
 
 function renderCards(snap) {
   const l = snap.latest || {};
   const mem = l.memory || {};
-  const io = l.io_rates || {};
-  const res = snap.resources || {};
+  const host = snap.host || {};
 
   // CPU
-  const cpu = l.cpu_percent !== undefined ? `${l.cpu_percent.toFixed(1)}%` : "–";
-  $("cpuVal").textContent = cpu;
-  $("cpuVal").className = `big ${l.cpu_percent > 85 ? "crit" : l.cpu_percent > 70 ? "warn" : "ok"}`;
-  $("cpuSub").textContent = `Load avg: ${l.load_avg_1 ?? "–"} | Cores: ${snap.host.cpu_cores || "–"}`;
+  const cpuPct = l.cpu_percent !== undefined ? l.cpu_percent : 0;
+  $("cpuVal").textContent = `${cpuPct.toFixed(1)}%`;
+  $("cpuVal").className = `big ${cpuPct > 85 ? "crit" : cpuPct > 70 ? "warn" : "ok"}`;
+  $("cpuSub").textContent = `${host.cpu_cores || 1} Cores · Load 1m: ${l.load_avg_1 ?? "–"}`;
+
+  cpuSparkHistory.push(cpuPct);
+  if (cpuSparkHistory.length > 25) cpuSparkHistory.shift();
+  updateSparkline("spark-cpu", cpuSparkHistory, 70, 85);
 
   // Memory
-  const memPct = mem.percent !== undefined ? `${mem.percent.toFixed(1)}%` : "–";
-  $("memVal").textContent = memPct;
-  $("memVal").className = `big ${mem.percent > 90 ? "crit" : mem.percent > 75 ? "warn" : "ok"}`;
+  const memPct = mem.percent !== undefined ? mem.percent : 0;
+  $("memVal").textContent = `${memPct.toFixed(1)}%`;
+  $("memVal").className = `big ${memPct > 90 ? "crit" : memPct > 75 ? "warn" : "ok"}`;
   $("memSub").textContent = `${mem.used_mb ?? "–"} MB used / ${mem.total_mb ?? "–"} MB`;
 
-  // Disks
+  memSparkHistory.push(memPct);
+  if (memSparkHistory.length > 25) memSparkHistory.shift();
+  updateSparkline("spark-mem", memSparkHistory, 75, 90);
+
+  // Storage
   const disks = l.disks || [];
-  const maxDisk = disks.reduce((acc, d) => Math.max(acc, d.used_pct), 0);
+  const maxDisk = disks.reduce((acc, d) => Math.max(acc, d.used_pct || 0), 0);
   $("diskVal").textContent = disks.length ? `${maxDisk.toFixed(0)}%` : "–";
   $("diskVal").className = `big ${maxDisk > 90 ? "crit" : maxDisk > 75 ? "warn" : "ok"}`;
-  $("diskSub").textContent = `${disks.length} filesystem partition(s) monitored`;
+  $("diskSub").textContent = `${disks.length} filesystem partition(s) active`;
 
   // Network
-  $("netVal").textContent = fmtBytes(io.recv_bytes_s);
-  $("netSub").textContent = `↑ ${fmtBytes(io.sent_bytes_s)} TX`;
+  const io = l.io_rates || {};
+  const rxKb = io.recv_bytes_s ? (io.recv_bytes_s / 1024).toFixed(0) : 0;
+  const txKb = io.sent_bytes_s ? (io.sent_bytes_s / 1024).toFixed(0) : 0;
+  $("netVal").textContent = `${rxKb} KB/s`;
+  $("netSub").textContent = `TX: ${txKb} KB/s · RX: ${rxKb} KB/s`;
 
   // GPU
   const gpu = snap.gpu || {};
-  if (gpu.available && gpu.devices && gpu.devices.length > 0) {
-    const dev = gpu.devices[0];
-    $("gpuVal").textContent = `${dev.utilization_gpu_pct ?? 0}%`;
+  const devs = gpu.devices || [];
+  if (devs.length > 0) {
+    const g0 = devs[0];
+    $("gpuVal").textContent = `${g0.utilization_pct || 0}%`;
     $("gpuVal").className = "big ok";
-    $("gpuSub").textContent = `${dev.name} (${dev.temperature_c ?? "–"}°C)`;
+    $("gpuSub").textContent = `${devs.length}x ${g0.model || "GPU"} · ${g0.temperature_c || 0}°C`;
   } else {
-    $("gpuVal").textContent = "N/A";
-    $("gpuVal").className = "big muted";
-    $("gpuSub").textContent = gpu.reason || "No dedicated GPU detected";
-  }
-
-  // Active Incidents banner
-  const banner = $("incidentBanner");
-  if (res.active_breaches && res.active_breaches.length > 0) {
-    banner.style.display = "block";
-    banner.textContent = `⚠️ Resource Guardian Alert: ${res.active_breaches.join(" | ")}`;
-  } else {
-    banner.style.display = "none";
+    $("gpuVal").textContent = "Nominal";
+    $("gpuVal").className = "big ok";
+    $("gpuSub").textContent = "No discrete GPU attached";
   }
 }
 
 function renderThermal(snap) {
   const t = snap.thermal || {};
-  const el = $("thermalState");
-  el.textContent = t.state || "–";
-  el.className = `big ${t.state === "CRITICAL" ? "crit" : t.state === "WARNING" ? "warn" : t.state === "RECOVERY" ? "sim" : "ok"}`;
+  const st = t.state || "NOMINAL";
+  $("thermalState").textContent = `${t.highest_c ? t.highest_c.toFixed(1) + "°C" : "–"}`;
+  $("thermalState").className = `big ${st === "CRITICAL" ? "crit" : st === "WARNING" ? "warn" : "ok"}`;
 
-  const cur = t.current_c !== null && t.current_c !== undefined ? `${t.current_c.toFixed(1)}°C` : "–";
-  const trend = t.trend_per_s !== null && t.trend_per_s !== undefined ? `${t.trend_per_s >= 0 ? "+" : ""}${t.trend_per_s.toFixed(2)}°/s` : "stable";
-  $("thermalSub").textContent = `${cur} (${trend}) · ${t.reason || ""}`;
+  const b = $("thermalStateBadge");
+  b.textContent = st;
+  b.className = `badge ${st === "CRITICAL" ? "crit" : st === "WARNING" ? "warn" : "ok"}`;
 
-  const q = $("thermalQual");
-  q.innerHTML = `<span class="chip ${t.data_quality}">${t.data_quality}</span>` +
-    (snap.overrides_enabled && Object.keys(snap.active_overrides || {}).length ? '<span class="tag">SIMULATED OVERRIDE</span>' : "");
+  const r = t.rate_of_rise_c_per_s !== undefined ? `${t.rate_of_rise_c_per_s >= 0 ? "+" : ""}${t.rate_of_rise_c_per_s.toFixed(2)}°C/s` : "0.0°C/s";
+  $("thermalSub").textContent = `Rate of rise: ${r} · Sensor: ${t.highest_sensor || "auto"}`;
 }
 
 function renderQuickSummaries(snap) {
-  const d = snap.docker || {};
-  const k = snap.kubernetes || {};
-  const ai = snap.ai_workloads || {};
+  const c = snap.docker || {};
+  const containers = c.containers || [];
+  const quickW = $("quickWorkloads");
+  if (containers.length) {
+    quickW.innerHTML = `
+      <table class="tbl">
+        <thead><tr><th>Container</th><th>Image</th><th>Status</th><th>Memory</th></tr></thead>
+        <tbody>
+          ${containers.slice(0, 4).map(cnt => `
+            <tr>
+              <td><strong>${cnt.name}</strong></td>
+              <td><code>${(cnt.image || "").substring(0, 20)}</code></td>
+              <td><span class="badge ${cnt.status === 'running' ? 'ok' : 'crit'}">${cnt.status}</span></td>
+              <td>${cnt.metrics ? cnt.metrics.memory_usage_mb + " MB" : "–"}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+  } else {
+    quickW.innerHTML = `<div style="font-size:0.8rem; color:var(--muted); padding:8px 0;">No active containers detected.</div>`;
+  }
 
-  $("quickWorkloads").innerHTML = `
-    <div class="summary-item"><div class="title">Docker</div>${d.available ? `${d.running_count} running / ${d.total_containers} total containers` : d.reason}</div>
-    <div class="summary-item"><div class="title">Kubernetes</div>${k.available ? `${k.nodes.length} nodes, ${k.pods.length} pods` : k.reason}</div>
-    <div class="summary-item"><div class="title">AI Serving (Ollama)</div>${ai.ollama && ai.ollama.available ? `Active (${ai.ollama.latency_ms}ms) · ${ai.ollama.installed_models.length} model(s)` : (ai.ollama ? ai.ollama.reason : "Offline")}</div>
-  `;
+  const actions = snap.actions || [];
+  const quickA = $("quickActions");
+  if (actions.length) {
+    quickA.innerHTML = `
+      <table class="tbl">
+        <thead><tr><th>Time</th><th>Action</th><th>Target</th><th>Result</th></tr></thead>
+        <tbody>
+          ${actions.slice(0, 4).map(a => `
+            <tr>
+              <td>${fmtTime(a.ts)}</td>
+              <td><strong>${a.action}</strong></td>
+              <td>${a.target || "host"}</td>
+              <td><span class="badge ok">${a.result || "executed"}</span></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+  } else {
+    quickA.innerHTML = `<div style="font-size:0.8rem; color:var(--muted); padding:8px 0;">No recent autonomous interventions recorded.</div>`;
+  }
 }
 
 // ------------------------------------------------------------- History Chart
@@ -186,221 +352,255 @@ function drawChart() {
     ctx.stroke();
   };
 
-  plot(pts, "#58a6ff");
-  plot(memPts, "#3fb950");
+  plot(pts, "#3b82f6");
+  plot(memPts, "#10b981");
 }
 
-// ------------------------------------------------------------- Hardware & Sensors Tab
-async function pollSensors() {
+// ------------------------------------------------------------- Cluster Mesh (v2.0)
+async function refreshCluster() {
   try {
-    const sensors = await (await fetch("/api/sensors")).json();
-    renderSensorsTable(sensors);
-    renderTempsList(sensors);
+    const summary = await (await fetch("/api/cluster/summary")).json();
+    const vitals = $("clusterVitals");
+    if (vitals) {
+      vitals.innerHTML = `
+        <div><strong>Total Nodes:</strong> ${summary.total_nodes} (Online: <span style="color:var(--ok); font-weight:600;">${summary.online_nodes}</span>, Drained: ${summary.drained_nodes})</div>
+        <div><strong>Cluster Capacity:</strong> ${summary.total_cluster_cpu_cores} CPU cores · ${summary.total_cluster_ram_gb} GB RAM · ${summary.total_cluster_gpus} GPUs</div>
+        <div><strong>Average CPU:</strong> ${summary.average_cpu_percent}%</div>
+      `;
+    }
 
-    const storage = await (await fetch("/api/system/storage")).json();
-    renderStorageTable(storage.partitions || []);
+    const tabBadge = $("clusterTabBadge");
+    if (tabBadge && summary.total_nodes > 0) {
+      tabBadge.style.display = "inline-flex";
+      tabBadge.textContent = summary.online_nodes;
+    }
 
-    const inv = await (await fetch("/api/system/inventory")).json();
-    renderInventory(inv);
+    const nodes = await (await fetch("/api/cluster/nodes")).json();
+    const tb = $("clusterNodesTbl").querySelector("tbody");
+    if (!nodes.length) {
+      tb.innerHTML = `<tr><td colspan="7" style="color:var(--muted); text-align:center; padding:16px;">No remote nodes registered. Run <code>aegis-agent</code> on worker nodes to join the mesh.</td></tr>`;
+    } else {
+      tb.innerHTML = nodes.map(n => {
+        const isOnline = n.status === "ONLINE";
+        const badgeClass = isOnline ? "ok" : n.status === "DRAINED" ? "info" : "crit";
+        const cpu = n.cpu_percent || 0;
+        const ram = n.ram_percent || 0;
+        return `
+          <tr>
+            <td><code>${n.node_id}</code></td>
+            <td><strong>${n.hostname}</strong></td>
+            <td>${n.ip_address || "–"}</td>
+            <td><span class="badge ${badgeClass}">${n.status}</span></td>
+            <td>
+              <div class="progress-container">
+                <span style="font-size:0.7rem; color:var(--muted); width:28px;">CPU</span>
+                <div class="progress-bar"><div class="progress-fill ${cpu > 80 ? 'crit' : 'ok'}" style="width:${cpu}%"></div></div>
+                <span class="progress-val">${cpu.toFixed(0)}%</span>
+              </div>
+              <div class="progress-container" style="margin-top:2px;">
+                <span style="font-size:0.7rem; color:var(--muted); width:28px;">RAM</span>
+                <div class="progress-bar"><div class="progress-fill ${ram > 85 ? 'crit' : 'ok'}" style="width:${ram}%"></div></div>
+                <span class="progress-val">${ram.toFixed(0)}%</span>
+              </div>
+            </td>
+            <td>${fmtRelative(n.last_heartbeat_at)}</td>
+            <td>
+              ${isOnline ? `<button class="btn sm danger" onclick="drainNode('${n.node_id}')">Drain</button>` : `<span style="font-size:0.75rem; color:var(--muted);">Drained</span>`}
+            </td>
+          </tr>
+        `;
+      }).join("");
+    }
 
-    const forecasts = await (await fetch("/api/forecasting/forecasts")).json();
-    renderForecasts(forecasts);
+    // Canary rollouts
+    const rollouts = await (await fetch("/api/canary/rollouts")).json();
+    const ctb = $("canaryTbl").querySelector("tbody");
+    if (!rollouts.length) {
+      ctb.innerHTML = `<tr><td colspan="7" style="color:var(--muted); text-align:center; padding:14px;">No active canary rollouts.</td></tr>`;
+    } else {
+      ctb.innerHTML = rollouts.map(r => {
+        const bClass = r.state === "PROMOTED" ? "ok" : r.state === "ROLLED_BACK" ? "crit" : "warn";
+        const pct = r.total_steps ? Math.round((r.current_step / r.total_steps) * 100) : 0;
+        return `
+          <tr>
+            <td><code>${r.rollout_id}</code></td>
+            <td><strong>${r.target}</strong></td>
+            <td><span class="badge ${bClass}">${r.state}</span></td>
+            <td>
+              <div class="progress-container">
+                <div class="progress-bar"><div class="progress-fill info" style="width:${pct}%"></div></div>
+                <span class="progress-val">${r.current_step}/${r.total_steps}</span>
+              </div>
+            </td>
+            <td>${(r.error_rate * 100).toFixed(1)}%</td>
+            <td>${r.latency_ms.toFixed(0)} ms</td>
+            <td>
+              ${r.state === "CANARY_OBSERVING" || r.state === "CANARY_INIT" ?
+                `<button class="btn sm danger" onclick="rollbackCanary('${r.rollout_id}')">Rollback</button>` :
+                `<span style="color:var(--muted); font-size:0.75rem;">${r.state}</span>`}
+            </td>
+          </tr>
+        `;
+      }).join("");
+    }
   } catch {}
 }
 
-function renderForecasts(forecasts) {
-  const c = $("forecastContainer");
-  if (!c) return;
-  const mem = forecasts.memory || {};
-  const disks = forecasts.disks || {};
-  let items = [];
-  if (mem.metric_name) {
-    const sevClass = mem.severity === "CRITICAL" ? "chip ERROR" : mem.severity === "WARNING" ? "chip STALE" : "chip VALID";
-    items.push(`
-      <div class="summary-item">
-        <div class="title">RAM Consumption Time-To-Exhaustion (TTE)</div>
-        <div>Current: <strong>${mem.current_value.toFixed(1)}%</strong> | Rate: <strong>${mem.rate_per_sec > 0 ? "+" : ""}${mem.rate_per_sec.toFixed(3)}%/s</strong></div>
-        <div style="margin-top:4px;">Projected TTE: <span class="${sevClass}">${mem.tte_human}</span> (Confidence: ${(mem.confidence * 100).toFixed(0)}%)</div>
-      </div>
-    `);
+window.drainNode = async function(nodeId) {
+  if (!confirm(`Are you sure you want to cordon and drain node '${nodeId}'?`)) return;
+  try {
+    const res = await (await fetch(`/api/cluster/nodes/${nodeId}/drain`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: "Operator dashboard drain" })
+    })).json();
+    showToast(`Drained node ${nodeId}`, "ok");
+    refreshCluster();
+  } catch (e) {
+    showToast(`Drain error: ${e}`, "crit");
   }
-  for (const [mount, f] of Object.entries(disks)) {
-    const sevClass = f.severity === "CRITICAL" ? "chip ERROR" : f.severity === "WARNING" ? "chip STALE" : "chip VALID";
-    items.push(`
-      <div class="summary-item">
-        <div class="title">Disk Partition [${mount}] Time-To-Exhaustion (TTE)</div>
-        <div>Current: <strong>${f.current_value.toFixed(1)}%</strong> | Rate: <strong>${f.rate_per_sec > 0 ? "+" : ""}${f.rate_per_sec.toFixed(3)}%/s</strong></div>
-        <div style="margin-top:4px;">Projected TTE: <span class="${sevClass}">${f.tte_human}</span></div>
-      </div>
-    `);
+};
+
+window.rollbackCanary = async function(rolloutId) {
+  if (!confirm(`Trigger emergency rollback for ${rolloutId}?`)) return;
+  try {
+    await fetch(`/api/canary/rollouts/${rolloutId}/rollback`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: "Operator manual rollback" })
+    });
+    showToast(`Rollback initiated for ${rolloutId}`, "warn");
+    refreshCluster();
+  } catch (e) {
+    showToast(`Rollback error: ${e}`, "crit");
   }
-  c.innerHTML = items.join("") || '<div class="muted">Awaiting telemetry samples for linear projection...</div>';
-}
+};
 
-function renderSensorsTable(sensors) {
-  const tb = $("sensorTbl").querySelector("tbody");
-  tb.innerHTML = sensors.map(s => {
-    const l = s.latest || {};
-    const val = l.value !== null && l.value !== undefined ? `${l.value.toFixed(1)} ${s.unit || ""}` : "–";
-    return `<tr>
-      <td><code>${s.sensor_id}</code></td>
-      <td>${s.kind}</td>
-      <td>${s.source}</td>
-      <td><strong>${val}</strong></td>
-      <td><span class="chip ${l.validity}">${l.validity}</span></td>
-      <td>${fmtTime(l.ts ? l.ts * 1000 : null)}</td>
-    </tr>`;
-  }).join("");
-}
+$("copyAgentCmdBtn").addEventListener("click", () => {
+  const host = window.location.origin;
+  copySnippet(`aegis agent --server ${host}`);
+});
+$("refreshClusterBtn").addEventListener("click", refreshCluster);
 
-function renderTempsList(sensors) {
-  const temps = sensors.filter(s => s.kind === "temperature");
-  const el = $("tempList");
-  if (!temps.length) {
-    el.innerHTML = '<div class="muted">No physical temperature sensors registered on host.</div>';
-    return;
-  }
-  el.innerHTML = temps.map(s => {
-    const l = s.latest || {};
-    const val = l.value !== null && l.value !== undefined ? `${l.value.toFixed(1)}°C` : "–";
-    return `<div class="temp-item">
-      <div class="val">${val}</div>
-      <div class="meta"><div><strong>${s.label || s.sensor_id}</strong></div><div class="muted">${s.source} · <span class="chip ${l.validity}">${l.validity}</span></div></div>
-    </div>`;
-  }).join("");
-}
-
-function renderStorageTable(partitions) {
-  const tb = $("storageTbl").querySelector("tbody");
-  tb.innerHTML = partitions.map(p => `
-    <tr>
-      <td><strong>${p.mount}</strong></td>
-      <td>${p.device}</td>
-      <td>${p.used_gb} GB</td>
-      <td>${p.free_gb} GB</td>
-      <td>${p.total_gb} GB</td>
-      <td><span class="${p.used_pct > 90 ? 'ev-crit' : 'ev-info'}">${p.used_pct}%</span></td>
-    </tr>
-  `).join("");
-}
-
-function renderInventory(inv) {
-  const hw = inv.hardware || {};
-  const sw = inv.software || {};
-  $("inventoryContainer").innerHTML = `
-    <div class="summary-item"><div class="title">Operating System</div>${sw.os_name} (${sw.architecture}) · Kernel ${sw.kernel}</div>
-    <div class="summary-item"><div class="title">CPU Architecture</div>${hw.cpu.model || "Unknown"} · ${hw.cpu.logical_cores} logical cores</div>
-    <div class="summary-item"><div class="title">Memory Capacity</div>${hw.memory.total_mb} MB RAM · ${hw.memory.swap_total_mb} MB Swap</div>
-    <div class="summary-item"><div class="title">Runtimes</div>Python ${sw.python_version} · Docker ${sw.docker ? sw.docker.version : "N/A"}</div>
-  `;
-}
-
-// ------------------------------------------------------------- Docker & K8s Tab
+// ------------------------------------------------------------- Docker & Workloads Tab
 async function refreshDocker() {
   try {
     const d = await (await fetch("/api/workloads/docker")).json();
     const tb = $("dockerTbl").querySelector("tbody");
-    if (!d.available || !d.containers.length) {
-      tb.innerHTML = `<tr><td colspan="8" class="muted">${d.reason || "No containers discovered."}</td></tr>`;
-      return;
+    const term = ($("dockerSearch")?.value || "").toLowerCase();
+
+    let list = d.containers || [];
+    if (dockerFilter === "RUNNING") list = list.filter(c => c.status === "running");
+    if (dockerFilter === "CRASH") list = list.filter(c => c.status !== "running" || c.restart_count > 3);
+    if (term) list = list.filter(c => c.name.toLowerCase().includes(term) || c.image.toLowerCase().includes(term));
+
+    if (!list.length) {
+      tb.innerHTML = `<tr><td colspan="8" style="color:var(--muted); text-align:center; padding:16px;">${d.available ? "No containers matching filter." : d.reason || "Docker daemon unavailable."}</td></tr>`;
+    } else {
+      tb.innerHTML = list.map(c => {
+        const m = c.metrics || {};
+        const isRunning = c.status === "running";
+        const memMb = m.memory_usage_mb || 0;
+        const cpuPct = m.cpu_percent !== undefined ? m.cpu_percent : 0;
+        return `
+          <tr>
+            <td><strong>${c.name}</strong></td>
+            <td><code>${c.image.substring(0, 24)}</code></td>
+            <td><span class="badge ${isRunning ? 'ok' : 'crit'}">${c.status}</span></td>
+            <td>${c.health || "–"}</td>
+            <td>${c.restart_count > 3 ? `<span class="badge crit">${c.restart_count}</span>` : c.restart_count}</td>
+            <td>${memMb ? `${memMb} MB` : "–"}</td>
+            <td>${cpuPct ? `${cpuPct}%` : "–"}</td>
+            <td>
+              <button class="btn sm" onclick="viewContainerLogs('${c.id}', '${c.name}')">Logs</button>
+              <button class="btn sm danger" onclick="restartContainer('${c.id}')">Restart</button>
+            </td>
+          </tr>
+        `;
+      }).join("");
     }
-    tb.innerHTML = d.containers.map(c => {
-      const m = c.metrics || {};
-      return `<tr>
-        <td><strong>${c.name}</strong></td>
-        <td><code>${c.image.substring(0, 24)}</code></td>
-        <td><span class="chip ${c.status === 'running' ? 'VALID' : 'ERROR'}">${c.status}</span></td>
-        <td>${c.health}</td>
-        <td>${c.restart_count}</td>
-        <td>${m.memory_usage_mb ? `${m.memory_usage_mb} MB` : "–"}</td>
-        <td>${m.cpu_percent !== undefined ? `${m.cpu_percent}%` : "–"}</td>
-        <td>
-          <button class="btn" onclick="viewContainerLogs('${c.id}', '${c.name}')">Logs</button>
-          <button class="btn danger" onclick="restartContainer('${c.id}')">Restart</button>
-        </td>
-      </tr>`;
-    }).join("");
 
     const k = await (await fetch("/api/workloads/k8s")).json();
     $("k8sOverview").innerHTML = k.available ?
-      k.nodes.map(n => `<div class="summary-item"><div class="title">Node: ${n.name}</div>Status: ${n.status} · Kubelet: ${n.kubelet_version}</div>`).join("") :
-      `<div class="muted">${k.reason}</div>`;
+      `<table class="tbl"><thead><tr><th>Node</th><th>Status</th><th>Kubelet</th></tr></thead><tbody>${k.nodes.map(n => `<tr><td><strong>${n.name}</strong></td><td><span class="badge ok">${n.status}</span></td><td>${n.kubelet_version}</td></tr>`).join("")}</tbody></table>` :
+      `<div style="color:var(--muted); font-size:0.8rem; padding:10px;">${k.reason}</div>`;
+
+    $("k8sPods").innerHTML = k.available ?
+      `<table class="tbl"><thead><tr><th>Pod</th><th>Namespace</th><th>Status</th><th>Restarts</th></tr></thead><tbody>${k.pods.map(p => `<tr><td>${p.name}</td><td>${p.namespace}</td><td><span class="badge ${p.status === 'Running' ? 'ok' : 'crit'}">${p.status}</span></td><td>${p.restart_count}</td></tr>`).join("")}</tbody></table>` :
+      `<div style="color:var(--muted); font-size:0.8rem; padding:10px;">No Kubernetes cluster configured in ~/.kube/config.</div>`;
   } catch {}
 }
 
 window.viewContainerLogs = async function(cid, name) {
   try {
-    const res = await (await fetch(`/api/workloads/docker/${cid}/logs?tail=80`)).json();
+    const res = await (await fetch(`/api/workloads/docker/${cid}/logs?tail=100`)).json();
     $("logViewerTitle").textContent = `Logs: ${name}`;
-    $("logViewerContent").textContent = res.logs || "No logs available.";
+    $("logViewerContent").textContent = res.logs || "No logs produced.";
     $("logViewerPanel").style.display = "block";
-  } catch {}
-};
-
-$("closeLogsBtn").addEventListener("click", () => {
-  $("logViewerPanel").style.display = "none";
-});
-
-window.restartContainer = async function(cid) {
-  if (!confirm("Authorize container restart?")) return;
-  try {
-    const res = await (await fetch(`/api/workloads/docker/${cid}/restart`, { method: "POST" })).json();
-    alert(`Restart result: ${res.result} (${res.mode || res.reason || ""})`);
-    refreshDocker();
+    $("logViewerPanel").scrollIntoView({ behavior: "smooth" });
   } catch (e) {
-    alert(`Restart error: ${e}`);
+    showToast(`Error fetching logs: ${e}`, "crit");
   }
 };
 
-// ------------------------------------------------------------- AI Infrastructure Tab
-async function refreshAI() {
+window.restartContainer = async function(cid) {
+  if (!confirm("Authorize policy restart for container?")) return;
   try {
-    const ai = await (await fetch("/api/workloads/ai")).json();
-    const o = ai.ollama || {};
-    $("ollamaStatus").innerHTML = `
-      <div class="summary-item"><div class="title">Status</div>${o.available ? "Online" : "Offline"} · ${o.endpoint}</div>
-      <div class="summary-item"><div class="title">Endpoint Latency</div>${o.latency_ms ? `${o.latency_ms} ms` : "–"}</div>
-      <div class="summary-item"><div class="title">Installed Models</div>${(o.installed_models || []).join(", ") || "None"}</div>
-    `;
+    const res = await (await fetch(`/api/workloads/docker/${cid}/restart`, { method: "POST" })).json();
+    showToast(`Restart result: ${res.result}`, res.result === "success" ? "ok" : "warn");
+    refreshDocker();
+  } catch (e) {
+    showToast(`Error restarting container: ${e}`, "crit");
+  }
+};
 
-    $("activeModels").innerHTML = (o.active_models && o.active_models.length) ?
-      o.active_models.map(m => `<div class="summary-item"><div class="title">${m.name}</div>Size: ${m.size_mb} MB (VRAM: ${m.size_vram_mb} MB)</div>`).join("") :
-      '<div class="muted">No models currently loaded in memory.</div>';
+$("closeLogsBtn")?.addEventListener("click", () => { $("logViewerPanel").style.display = "none"; });
+$("copyLogsBtn")?.addEventListener("click", () => { copySnippet($("logViewerContent").textContent); });
+$("refreshDockerBtn")?.addEventListener("click", refreshDocker);
+$("dockerSearch")?.addEventListener("input", refreshDocker);
 
-    $("aiProcs").innerHTML = (ai.ai_processes && ai.ai_processes.length) ?
-      ai.ai_processes.map(p => `<div class="summary-item"><div class="title">${p.name} (PID ${p.pid})</div>Runtime: ${p.runtime} · CPU: ${p.cpu_percent}% · RAM: ${p.memory_mb} MB</div>`).join("") :
-      '<div class="muted">No local AI inference processes active.</div>';
-
-    const dev = await (await fetch("/api/devin/status")).json();
-    $("devinStatusBox").innerHTML = `
-      <div class="summary-item"><div class="title">Devin Status</div><strong>${dev.status}</strong></div>
-      <div class="summary-item"><div class="title">API Key Configured</div>${dev.has_api_key ? "Yes" : "No"}</div>
-      <div class="summary-item"><div class="title">Desktop CLI</div>${dev.has_desktop_cli ? dev.cli_path : "Not found on PATH"}</div>
-      <div class="muted" style="margin-top:6px;">${dev.setup_instructions}</div>
-    `;
-  } catch {}
-}
+document.querySelectorAll("#dockerFilterGroup .filter-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#dockerFilterGroup .filter-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    dockerFilter = btn.dataset.filter;
+    refreshDocker();
+  });
+});
 
 // ------------------------------------------------------------- Incidents Tab
 async function refreshIncidents() {
   try {
     const list = await (await fetch("/api/incidents")).json();
     const tb = $("incidentsTbl").querySelector("tbody");
-    if (!list.length) {
-      tb.innerHTML = '<tr><td colspan="7" class="muted">No incidents recorded. Infrastructure nominal.</td></tr>';
+
+    let filtered = list;
+    if (incidentFilter === "ACTIVE") filtered = list.filter(i => i.state !== "RESOLVED" && i.state !== "RECOVERY_VERIFIED");
+    if (incidentFilter === "CRIT") filtered = list.filter(i => (i.severity || "").toLowerCase() === "critical");
+    if (incidentFilter === "APPROVAL") filtered = list.filter(i => i.state === "NEEDS_HUMAN_APPROVAL");
+    if (incidentFilter === "RESOLVED") filtered = list.filter(i => i.state === "RESOLVED" || i.state === "RECOVERY_VERIFIED");
+
+    if (!filtered.length) {
+      tb.innerHTML = `<tr><td colspan="7" style="color:var(--muted); text-align:center; padding:16px;">No incidents matching filter. Infrastructure nominal.</td></tr>`;
       return;
     }
-    tb.innerHTML = list.map(inc => `
-      <tr>
-        <td><code>${inc.id}</code></td>
-        <td>${inc.category}</td>
-        <td><span class="chip ${inc.severity === 'critical' ? 'ERROR' : 'STALE'}">${inc.severity}</span></td>
-        <td><strong>${inc.title}</strong></td>
-        <td><span class="chip ${inc.state === 'RECOVERY_VERIFIED' ? 'VALID' : 'STALE'}">${inc.state}</span></td>
-        <td>${fmtTime(inc.created_at)}</td>
-        <td><button class="btn" onclick="selectIncident('${inc.id}')">Inspect</button></td>
-      </tr>
-    `).join("");
+
+    tb.innerHTML = filtered.map(inc => {
+      const isCrit = (inc.severity || "").toLowerCase() === "critical";
+      const isResolved = inc.state === "RESOLVED" || inc.state === "RECOVERY_VERIFIED";
+      const stateBadge = isResolved ? "ok" : inc.state === "NEEDS_HUMAN_APPROVAL" ? "warn" : "info";
+      return `
+        <tr>
+          <td><code>${inc.id}</code></td>
+          <td><span class="badge ${isCrit ? 'crit' : 'warn'}">${inc.severity}</span></td>
+          <td>${inc.category}</td>
+          <td><strong>${inc.title}</strong></td>
+          <td><span class="badge ${stateBadge}">${inc.state}</span></td>
+          <td>${fmtTime(inc.created_at)}</td>
+          <td><button class="btn sm" onclick="selectIncident('${inc.id}')">Inspect</button></td>
+        </tr>
+      `;
+    }).join("");
   } catch {}
 }
 
@@ -411,53 +611,180 @@ window.selectIncident = async function(iid) {
     const inc = list.find(x => x.id === iid);
     if (!inc) return;
 
-    $("incDetailTitle").textContent = `Incident: ${inc.id} (${inc.state})`;
+    $("incDetailTitle").textContent = `Incident ${inc.id} — ${inc.title}`;
     $("incDetailContent").innerHTML = `
+      <div style="margin-bottom:8px;"><strong>Severity:</strong> <span class="badge ${inc.severity === 'critical' ? 'crit' : 'warn'}">${inc.severity}</span> | <strong>State:</strong> <span class="badge info">${inc.state}</span></div>
       <p><strong>Summary:</strong> ${inc.summary || "–"}</p>
-      <p><strong>Lifecycle:</strong></p>
-      <div class="events">${(inc.lifecycle || []).map(l => `<div class="ev"><time>${fmtTime(l.ts)}</time> <strong>${l.state}</strong> (${l.actor || ""}): ${l.note || ""}</div>`).join("")}</div>
-      <p style="margin-top:10px;"><strong>Evidence:</strong></p>
-      <pre class="log-box">${JSON.stringify(inc.evidence || [], null, 2)}</pre>
+      <div style="font-size:0.8rem; margin:10px 0;"><strong>State Transitions:</strong></div>
+      <div class="events-console" style="height:120px; margin-bottom:12px;">
+        ${(inc.lifecycle || []).map(l => `<div class="ev-line info"><time>${fmtTime(l.ts)}</time> <strong>${l.state}</strong> (${l.actor || "engine"}): ${l.note || ""}</div>`).join("")}
+      </div>
+      <div style="font-size:0.8rem; margin-bottom:4px;"><strong>Collected Telemetry Evidence:</strong></div>
+      <pre class="log-box" style="max-height:160px;">${JSON.stringify(inc.evidence || [], null, 2)}</pre>
     `;
     $("incidentDetailPanel").style.display = "block";
+    $("incidentDetailPanel").scrollIntoView({ behavior: "smooth" });
   } catch {}
 };
 
-$("runDiagBtn").addEventListener("click", async () => {
+$("copyIncCliBtn")?.addEventListener("click", () => {
+  if (activeIncidentId) copySnippet(`aegis incidents diagnose ${activeIncidentId}`);
+});
+$("closeIncDetailBtn")?.addEventListener("click", () => { $("incidentDetailPanel").style.display = "none"; });
+$("refreshIncidentsBtn")?.addEventListener("click", refreshIncidents);
+
+document.querySelectorAll("#incFilterGroup .filter-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#incFilterGroup .filter-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    incidentFilter = btn.dataset.filter;
+    refreshIncidents();
+  });
+});
+
+$("runDiagBtn")?.addEventListener("click", async () => {
   if (!activeIncidentId) return;
   $("runDiagBtn").textContent = "Diagnosing…";
   try {
     const res = await (await fetch(`/api/incidents/${activeIncidentId}/diagnose`, { method: "POST" })).json();
-    alert(`Diagnosis (${res.provider}):\nRoot Cause: ${res.root_cause_hypothesis}\nConfidence: ${res.confidence_score * 100}%\nCode/Config Issue: ${res.is_code_or_config_issue}`);
+    showToast(`Diagnosis (${res.provider}): ${res.root_cause_hypothesis}`, "ok");
     selectIncident(activeIncidentId);
   } catch (e) {
-    alert(`Diagnosis error: ${e}`);
+    showToast(`Diagnosis error: ${e}`, "crit");
   } finally {
     $("runDiagBtn").textContent = "Diagnose with AI";
   }
 });
 
-// ------------------------------------------------------------- Devin & Engineering Tab
-async function refreshDevin() {
+// ------------------------------------------------------------- Hardware & Forecasting Tab
+async function pollSensors() {
   try {
-    const tasks = await (await fetch("/api/devin/tasks")).json();
-    $("devinTasksList").innerHTML = tasks.length ?
-      tasks.map(t => `<div class="summary-item"><div class="title">${t.id} (${t.state})</div>${t.payload ? t.payload.title : ""} · Claims: ${t.claimed_by || "None"}</div>`).join("") :
-      '<div class="muted">No Devin repair tasks in queue.</div>';
+    const sensors = await (await fetch("/api/sensors")).json();
+    $("sensorTbl").querySelector("tbody").innerHTML = sensors.map(s => {
+      const l = s.latest || {};
+      const val = l.value !== null && l.value !== undefined ? `${l.value.toFixed(1)} ${s.unit || ""}` : "–";
+      const bClass = l.validity === "VALID" ? "ok" : l.validity === "STALE" ? "warn" : "crit";
+      return `<tr><td><code>${s.sensor_id}</code></td><td>${s.kind}</td><td><strong>${val}</strong></td><td><span class="badge ${bClass}">${l.validity}</span></td></tr>`;
+    }).join("");
 
-    const gh = await (await fetch("/api/github/status")).json();
-    $("githubStatusBox").innerHTML = `
-      <div class="summary-item"><div class="title">Repository</div><a href="${gh.repo_url}" target="_blank">${gh.owner}/${gh.repo}</a></div>
-      <div class="summary-item"><div class="title">Authentication</div>${gh.authenticated ? `Authenticated (${gh.auth_method})` : "Unauthenticated"}</div>
+    const storage = await (await fetch("/api/system/storage")).json();
+    $("storageTbl").querySelector("tbody").innerHTML = (storage.partitions || []).map(p => `
+      <tr>
+        <td><strong>${p.mount}</strong></td>
+        <td><code>${p.device}</code></td>
+        <td>${p.used_gb} / ${p.total_gb} GB</td>
+        <td>
+          <div class="progress-container">
+            <div class="progress-bar"><div class="progress-fill ${p.used_pct > 85 ? 'crit' : 'ok'}" style="width:${p.used_pct}%"></div></div>
+            <span class="progress-val">${p.used_pct}%</span>
+          </div>
+        </td>
+      </tr>
+    `).join("");
+
+    const inv = await (await fetch("/api/system/inventory")).json();
+    const hw = inv.hardware || {};
+    const sw = inv.software || {};
+    $("inventoryContainer").innerHTML = `
+      <table class="tbl">
+        <tbody>
+          <tr><td style="color:var(--muted);">OS &amp; Kernel</td><td><strong>${sw.os_name}</strong> (${sw.architecture}) · Kernel ${sw.kernel}</td></tr>
+          <tr><td style="color:var(--muted);">CPU Model</td><td>${hw.cpu.model || "Unknown"} (${hw.cpu.logical_cores} cores)</td></tr>
+          <tr><td style="color:var(--muted);">Memory Capacity</td><td>${hw.memory.total_mb} MB RAM · ${hw.memory.swap_total_mb} MB Swap</td></tr>
+          <tr><td style="color:var(--muted);">Python Runtime</td><td>Python ${sw.python_version}</td></tr>
+        </tbody>
+      </table>
+    `;
+
+    const forecasts = await (await fetch("/api/forecasting/forecasts")).json();
+    const fc = $("forecastContainer");
+    const mem = forecasts.memory || {};
+    const disks = forecasts.disks || {};
+    let items = [];
+    if (mem.metric_name) {
+      const bClass = mem.severity === "CRITICAL" ? "crit" : mem.severity === "WARNING" ? "warn" : "ok";
+      items.push(`
+        <div style="background:var(--card); border:1px solid var(--line); border-radius:5px; padding:10px 14px; margin-bottom:8px;">
+          <div><strong>RAM Consumption Trend:</strong> Current: ${mem.current_value.toFixed(1)}% | Rate: ${mem.rate_per_sec > 0 ? "+" : ""}${mem.rate_per_sec.toFixed(3)}%/s</div>
+          <div style="margin-top:4px;">Projected Time-To-Exhaustion: <span class="badge ${bClass}">${mem.tte_human}</span> (Confidence: ${(mem.confidence * 100).toFixed(0)}%)</div>
+        </div>
+      `);
+    }
+    for (const [mount, f] of Object.entries(disks)) {
+      const bClass = f.severity === "CRITICAL" ? "crit" : f.severity === "WARNING" ? "warn" : "ok";
+      items.push(`
+        <div style="background:var(--card); border:1px solid var(--line); border-radius:5px; padding:10px 14px; margin-bottom:8px;">
+          <div><strong>Disk Partition [${mount}] Trend:</strong> Current: ${f.current_value.toFixed(1)}% | Rate: ${f.rate_per_sec > 0 ? "+" : ""}${f.rate_per_sec.toFixed(3)}%/s</div>
+          <div style="margin-top:4px;">Projected Time-To-Exhaustion: <span class="badge ${bClass}">${f.tte_human}</span></div>
+        </div>
+      `);
+    }
+    fc.innerHTML = items.join("") || `<div style="color:var(--muted); font-size:0.8rem; padding:8px 0;">Accumulating telemetry samples for ordinary least squares projection...</div>`;
+  } catch {}
+}
+
+// ------------------------------------------------------------- AI Serving Tab
+async function refreshAI() {
+  try {
+    const ai = await (await fetch("/api/workloads/ai")).json();
+    const o = ai.ollama || {};
+    $("ollamaStatus").innerHTML = `
+      <table class="tbl">
+        <tbody>
+          <tr><td style="color:var(--muted);">Status</td><td><span class="badge ${o.available ? 'ok' : 'crit'}">${o.available ? 'ONLINE' : 'OFFLINE'}</span></td></tr>
+          <tr><td style="color:var(--muted);">Endpoint</td><td><code>${o.endpoint || "http://127.0.0.1:11434"}</code></td></tr>
+          <tr><td style="color:var(--muted);">Latency</td><td>${o.latency_ms ? `${o.latency_ms} ms` : "–"}</td></tr>
+          <tr><td style="color:var(--muted);">Installed Models</td><td>${(o.installed_models || []).join(", ") || "None"}</td></tr>
+        </tbody>
+      </table>
+    `;
+
+    $("activeModels").innerHTML = (o.active_models && o.active_models.length) ?
+      `<table class="tbl"><thead><tr><th>Model</th><th>RAM Size</th><th>VRAM Size</th></tr></thead><tbody>${o.active_models.map(m => `<tr><td><strong>${m.name}</strong></td><td>${m.size_mb} MB</td><td>${m.size_vram_mb} MB</td></tr>`).join("")}</tbody></table>` :
+      '<div style="color:var(--muted); font-size:0.8rem; padding:10px;">No models currently loaded in memory.</div>';
+
+    $("aiProcs").innerHTML = (ai.ai_processes && ai.ai_processes.length) ?
+      `<table class="tbl"><thead><tr><th>Process</th><th>PID</th><th>Runtime</th><th>Memory</th></tr></thead><tbody>${ai.ai_processes.map(p => `<tr><td><strong>${p.name}</strong></td><td><code>${p.pid}</code></td><td>${p.runtime}</td><td>${p.memory_mb} MB</td></tr>`).join("")}</tbody></table>` :
+      '<div style="color:var(--muted); font-size:0.8rem; padding:10px;">No local AI inference processes active.</div>';
+
+    const dev = await (await fetch("/api/devin/status")).json();
+    $("devinStatusBox").innerHTML = `
+      <table class="tbl">
+        <tbody>
+          <tr><td style="color:var(--muted);">Readiness</td><td><span class="badge ${dev.has_api_key ? 'ok' : 'warn'}">${dev.status}</span></td></tr>
+          <tr><td style="color:var(--muted);">API Key</td><td>${dev.has_api_key ? "Configured" : "Unset (Mock/Queue Mode)"}</td></tr>
+          <tr><td style="color:var(--muted);">Devin CLI</td><td>${dev.has_desktop_cli ? dev.cli_path : "Not in PATH"}</td></tr>
+        </tbody>
+      </table>
     `;
   } catch {}
 }
 
-$("runValidationBtn").addEventListener("click", async () => {
+// ------------------------------------------------------------- Devin & PR Tab
+async function refreshDevin() {
+  try {
+    const tasks = await (await fetch("/api/devin/tasks")).json();
+    $("devinTasksList").innerHTML = tasks.length ?
+      `<table class="tbl"><thead><tr><th>Task ID</th><th>Title</th><th>State</th></tr></thead><tbody>${tasks.map(t => `<tr><td><code>${t.id}</code></td><td><strong>${t.payload ? t.payload.title : ""}</strong></td><td><span class="badge info">${t.state}</span></td></tr>`).join("")}</tbody></table>` :
+      '<div style="color:var(--muted); font-size:0.8rem; padding:10px;">No Devin repair tasks in queue.</div>';
+
+    const gh = await (await fetch("/api/github/status")).json();
+    $("githubStatusBox").innerHTML = `
+      <table class="tbl">
+        <tbody>
+          <tr><td style="color:var(--muted);">Repository</td><td><a href="${gh.repo_url}" target="_blank"><strong>${gh.owner}/${gh.repo}</strong></a></td></tr>
+          <tr><td style="color:var(--muted);">Auth State</td><td><span class="badge ${gh.authenticated ? 'ok' : 'warn'}">${gh.authenticated ? 'AUTHENTICATED' : 'READONLY'}</span></td></tr>
+        </tbody>
+      </table>
+    `;
+  } catch {}
+}
+
+$("runValidationBtn")?.addEventListener("click", async () => {
   const tid = $("valTaskId").value || "TASK-VAL-DEMO";
   const patchText = $("valPatchText").value;
   if (!patchText) {
-    alert("Please provide a unified git patch to validate.");
+    showToast("Please paste a git patch to validate", "warn");
     return;
   }
   $("runValidationBtn").textContent = "Validating…";
@@ -469,51 +796,51 @@ $("runValidationBtn").addEventListener("click", async () => {
     })).json();
 
     $("valResultBox").innerHTML = `
-      <div class="summary-item">
-        <div class="title">Validation ${res.passed ? "PASSED ✅" : "FAILED ❌"}</div>
-        <p>Scope Valid: ${res.scope_valid ? "Yes" : `No (${res.rejection_reason})`}</p>
-        <p>Changed Files: ${(res.changed_files || []).join(", ")}</p>
-        <div class="events">${(res.steps || []).map(s => `<div class="ev">${s.passed ? "✅" : "❌"} <code>${s.command}</code> (exit code ${s.exit_code})</div>`).join("")}</div>
+      <div style="background:var(--card); border:1px solid var(--line); border-radius:5px; padding:12px;">
+        <div style="margin-bottom:6px;"><strong>Sandbox Test Outcome:</strong> <span class="badge ${res.passed ? 'ok' : 'crit'}">${res.passed ? 'PASSED' : 'REJECTED'}</span></div>
+        <div>Scope Check: ${res.scope_valid ? "✔ Approved" : `❌ Rejected (${res.rejection_reason})`}</div>
+        <div style="margin-top:6px;">Changed Files: <code>${(res.changed_files || []).join(", ") || "none"}</code></div>
+        <div class="events-console" style="height:110px; margin-top:8px;">
+          ${(res.steps || []).map(s => `<div class="ev-line ${s.passed ? 'info' : 'crit'}"><span>${s.passed ? '✔' : '❌'}</span> <code>${s.command}</code> (exit code: ${s.exit_code})</div>`).join("")}
+        </div>
       </div>
     `;
   } catch (e) {
-    alert(`Validation error: ${e}`);
+    showToast(`Validation error: ${e}`, "crit");
   } finally {
-    $("runValidationBtn").textContent = "Run Isolated Validation";
+    $("runValidationBtn").textContent = "Run Sandbox Validation";
   }
 });
 
-// ------------------------------------------------------------- Policy, Audit & Demo Tab
+// ------------------------------------------------------------- Policy, Audit & Keys Tab
 async function refreshAudit() {
   try {
     const actions = await (await fetch("/api/actions?limit=50")).json();
-    const tb = $("auditTbl").querySelector("tbody");
-    tb.innerHTML = actions.map(a => `
+    $("auditTbl").querySelector("tbody").innerHTML = actions.map(a => `
       <tr>
         <td>${fmtTime(a.ts)}</td>
-        <td><code>operator</code></td>
+        <td><code>${a.actor || "operator"}</code></td>
         <td><strong>${a.action}</strong></td>
-        <td>${a.target || "–"}</td>
+        <td>${a.target || "host"}</td>
         <td>${a.detail || a.reason || "–"}</td>
       </tr>
     `).join("");
 
     const demo = await (await fetch("/api/demo")).json();
-    renderDemo(demo);
+    $("demoBtns").innerHTML = Object.entries(demo.kinds || {}).map(([k, desc]) => `
+      <button class="btn sm" title="${desc}" onclick="applyDemo('${k}')">${k.replace("_", " ").toUpperCase()}</button>
+    `).join("");
+
+    const active = Object.entries(demo.active_overrides || {});
+    $("demoActive").innerHTML = active.length ?
+      `Active simulation overrides: ${active.map(([s, d]) => `<code>${s}=${d.value_c}°C</code>`).join(", ")}` :
+      "No active simulated overrides.";
+
+    const keys = await (await fetch("/api/security/keys")).json();
+    $("apiKeysTbl").querySelector("tbody").innerHTML = keys.length ?
+      keys.map(k => `<tr><td><strong>${k.name}</strong></td><td><span class="badge info">${k.role}</span></td><td><code>${k.key_prefix}</code></td><td>${fmtTime(k.created_at)}</td><td>${fmtRelative(k.last_used_at)}</td></tr>`).join("") :
+      `<tr><td colspan="5" style="color:var(--muted); text-align:center; padding:12px;">No API keys generated.</td></tr>`;
   } catch {}
-}
-
-function renderDemo(demo) {
-  const container = $("demoBtns");
-  const kinds = demo.kinds || {};
-  container.innerHTML = Object.entries(kinds).map(([k, desc]) => `
-    <button class="btn" title="${desc}" onclick="applyDemo('${k}')">${k.replace("_", " ").toUpperCase()}</button>
-  `).join("");
-
-  const active = Object.entries(demo.active_overrides || {});
-  $("demoActive").innerHTML = active.length ?
-    `Active simulated overrides: ${active.map(([s, d]) => `<code>${s}=${d.value_c}°C</code>`).join(", ")}` :
-    "No active simulated overrides.";
 }
 
 window.applyDemo = async function(kind) {
@@ -523,32 +850,61 @@ window.applyDemo = async function(kind) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ kind })
     });
+    showToast(`Injected test scenario: ${kind}`, "info");
     pollOverview();
     refreshAudit();
   } catch (e) {
-    alert(`Demo override error: ${e}`);
+    showToast(`Demo error: ${e}`, "crit");
   }
 };
+
+$("createApiKeyBtn")?.addEventListener("click", async () => {
+  const name = prompt("Enter a friendly name for this API key (e.g. worker-node-01):");
+  if (!name) return;
+  const role = prompt("Enter role [ADMIN, OPERATOR, NODE_AGENT, READONLY]:", "NODE_AGENT");
+  if (!role) return;
+  try {
+    const res = await (await fetch("/api/security/keys", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, role: role.toUpperCase() })
+    })).json();
+    prompt("API Key generated! Save this secret now:", res.secret_key);
+    refreshAudit();
+  } catch (e) {
+    showToast(`Error creating key: ${e}`, "crit");
+  }
+});
 
 // ------------------------------------------------------------- Controls & SSE
 $("modeToggle").addEventListener("change", async (e) => {
   const mode = e.target.checked ? "policy_autonomous" : "monitoring_only";
-  await fetch("/api/policy/mode", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ mode })
-  });
-  pollOverview();
+  try {
+    await fetch("/api/policy/mode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode })
+    });
+    showToast(`Mode set to ${mode}`, "ok");
+    pollOverview();
+  } catch (e) {
+    showToast(`Error updating mode: ${e}`, "crit");
+  }
 });
 
 $("estopBtn").addEventListener("click", async () => {
   const active = $("estopBtn").classList.contains("active");
-  await fetch("/api/policy/emergency_stop", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ enabled: !active })
-  });
-  pollOverview();
+  try {
+    await fetch("/api/policy/emergency_stop", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: !active })
+    });
+    showToast(active ? "Emergency stop disengaged" : "Emergency stop ENGAGED", active ? "ok" : "crit");
+    pollOverview();
+  } catch (e) {
+    showToast(`Error setting emergency stop: ${e}`, "crit");
+  }
 });
 
 function initSSE() {
@@ -562,65 +918,37 @@ function initSSE() {
 }
 
 function appendEvent(ev) {
+  if (eventsPaused) return;
   const c = $("events");
   if (!c) return;
+
+  const sev = (ev.severity || "info").toLowerCase();
+  if (currentEventFilter === "CRIT" && sev !== "crit" && sev !== "critical") return;
+  if (currentEventFilter === "WARN" && sev !== "warn" && sev !== "warning") return;
+  if (currentEventFilter === "INFO" && sev !== "info") return;
+
   const d = document.createElement("div");
-  d.className = `ev ev-${ev.severity || "info"}`;
+  d.className = `ev-line ${sev}`;
   d.innerHTML = `<time>${fmtTime(ev.ts)}</time> <span>${ev.message}</span>`;
   c.prepend(d);
-  if (c.children.length > 50) c.lastChild.remove();
+  if (c.children.length > 80) c.lastChild.remove();
 }
 
-// ------------------------------------------------------------- Cluster & Canary (v2.0)
-async function refreshCluster() {
-  try {
-    const summary = await (await fetch("/api/cluster/summary")).json();
-    $("clusterVitals").innerHTML = `
-      <div class="summary-item">
-        <div class="title">Cluster Mesh Aggregate Capacity</div>
-        <div>Total Nodes: <strong>${summary.total_nodes}</strong> (Online: <strong>${summary.online_nodes}</strong>, Drained: <strong>${summary.drained_nodes}</strong>, Offline: <strong>${summary.offline_nodes}</strong>)</div>
-        <div style="margin-top:4px;">Average Cluster CPU: <strong>${summary.average_cpu_percent}%</strong> | Cluster Memory: <strong>${summary.cluster_memory_percent}%</strong> (${summary.cluster_memory_used_mb}MB / ${summary.cluster_memory_total_mb}MB)</div>
-      </div>
-    `;
+document.querySelectorAll("#eventFilterGroup .filter-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#eventFilterGroup .filter-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentEventFilter = btn.dataset.filter;
+  });
+});
 
-    const nodes = await (await fetch("/api/cluster/nodes")).json();
-    $("clusterNodesTbl").querySelector("tbody").innerHTML = nodes.map(n => {
-      const statusClass = n.status === "ONLINE" ? "chip VALID" : n.status === "DRAINED" ? "chip SIMULATED_OVERRIDE" : "chip ERROR";
-      return `<tr>
-        <td><code>${n.node_id}</code></td>
-        <td><strong>${n.hostname}</strong></td>
-        <td>${n.ip_address || "–"}</td>
-        <td><span class="${statusClass}">${n.status}</span></td>
-        <td>${fmtTime(new Date(n.last_heartbeat_at).getTime())}</td>
-        <td>${n.status !== "DRAINED" ? `<button class="btn danger" onclick="drainNode('${n.node_id}')">Drain</button>` : '<span class="muted">Drained</span>'}</td>
-      </tr>`;
-    }).join("");
+$("pauseEventsBtn")?.addEventListener("click", () => {
+  eventsPaused = !eventsPaused;
+  $("pauseEventsBtn").textContent = eventsPaused ? "Resume" : "Pause";
+  $("pauseEventsBtn").classList.toggle("danger", eventsPaused);
+});
 
-    const rollouts = await (await fetch("/api/canary/rollouts")).json();
-    $("canaryTbl").querySelector("tbody").innerHTML = rollouts.map(r => {
-      const stateClass = r.state === "PROMOTED" ? "chip VALID" : r.state === "ROLLED_BACK" ? "chip ERROR" : "chip STALE";
-      return `<tr>
-        <td><code>${r.rollout_id}</code></td>
-        <td><strong>${r.target}</strong></td>
-        <td><span class="${stateClass}">${r.state}</span></td>
-        <td>${r.current_step}/${r.total_steps}</td>
-        <td>${(r.error_rate * 100).toFixed(1)}%</td>
-        <td>${r.latency_ms.toFixed(0)} ms</td>
-        <td>${r.revert_trigger || "–"}</td>
-      </tr>`;
-    }).join("");
-  } catch {}
-}
-
-window.drainNode = async (nodeId) => {
-  await fetch(`/api/cluster/nodes/${nodeId}/drain`, { method: "POST", headers: { "Content-Type": "application/json" } });
-  refreshCluster();
-};
-
-const rcb = $("refreshClusterBtn");
-if (rcb) rcb.addEventListener("click", refreshCluster);
-
-// ------------------------------------------------------------- Startup
+// ------------------------------------------------------------- Initialization
 pollOverview();
 pollHistory();
 pollSensors();

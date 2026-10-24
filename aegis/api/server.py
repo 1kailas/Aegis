@@ -640,6 +640,15 @@ def create_app(ctx: AppContext) -> FastAPI:
     def canary_list() -> list[dict[str, Any]]:
         return ctx.canary.list_rollouts()
 
+    @app.post("/api/canary/rollouts/{rollout_id}/rollback", dependencies=[Depends(_auth_dp(ctx))])
+    def canary_rollback(rollout_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        reason = (payload or {}).get("reason", "Operator manual rollback")
+        try:
+            record = ctx.canary.trigger_rollback(rollout_id, reason=reason)
+            return record.as_dict()
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+
     # ------------------------------------------------------------- Notifications & Webhooks (v2.0)
     @app.get("/api/notifications/channels")
     def list_notification_channels() -> list[dict[str, Any]]:

@@ -1,0 +1,40 @@
+version: "3.8"
+
+services:
+  # Aegis Control Plane Server & Dashboard
+  aegis-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["server", "--host", "0.0.0.0", "--port", "8000", "--db", "/app/data/aegis.db"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - aegis-data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Aegis Node Agent (Monitors Host Metrics & Reports into Server)
+  aegis-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["agent", "--server", "http://aegis-server:8000", "--interval", "5.0", "--labels", "role=worker,env=compose"]
+    depends_on:
+      aegis-server:
+        condition: service_healthy
+    pid: host
+    network_mode: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
+volumes:
+  aegis-data:

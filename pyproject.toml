@@ -21,6 +21,12 @@ dependencies = [
 containers = ["docker>=7.0"]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
 
+[project.scripts]
+aegis = "aegis.cli.main:main"
+aegis-server = "aegis.main:main"
+aegis-agent = "aegis.client.agent:main"
+aegis-client = "aegis.client.agent:main"
+
 [tool.setuptools.packages.find]
 include = ["aegis*"]
 

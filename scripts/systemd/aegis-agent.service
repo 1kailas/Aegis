@@ -1,0 +1,17 @@
+[Unit]
+Description=Aegis AI Telemetry Agent
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/aegis
+Environment="PATH=/opt/aegis/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
+EnvironmentFile=-/etc/default/aegis-agent
+ExecStart=/opt/aegis/.venv/bin/aegis-agent --server ${AEGIS_SERVER_URL:-http://127.0.0.1:8000} ${AEGIS_AGENT_EXTRA_FLAGS}
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

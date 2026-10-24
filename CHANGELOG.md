@@ -4,6 +4,32 @@ All notable changes to the **Aegis AI** platform are documented in this file in 
 
 ---
 
+## 2026-10-25T00:15:00+05:30 — Production Client-Server Architecture, Unified CLI, Automated Installer & SRE UI Overhaul
+
+- **Changed:**
+  - Implemented `AegisAgent` daemon in `aegis/client/agent.py` enabling distributed worker nodes to report telemetry (CPU, RAM, swap, disk, load averages, PSI, Docker containers) to the Aegis Server control plane via periodic authenticated heartbeats with exponential backoff and graceful node draining on shutdown.
+  - Implemented unified developer CLI in `aegis/cli/main.py` with commands: `aegis server`, `aegis agent`, `aegis status`, `aegis nodes [list|drain]`, `aegis incidents [list|diagnose]`, `aegis canary [list|rollback]`, `aegis keys [create|list]`, `aegis mode`, `aegis estop`.
+  - Added console entrypoints to `pyproject.toml` (`aegis`, `aegis-server`, `aegis-agent`, `aegis-client`).
+  - Authored automated Linux installer script `scripts/install.sh` supporting virtualenv provisioning, CLI symlinking to `/usr/local/bin`, and systemd service installation.
+  - Created systemd unit templates `scripts/systemd/aegis-server.service` and `scripts/systemd/aegis-agent.service`.
+  - Created `Dockerfile` and `docker-compose.yml` defining production containerization for control plane and node agent.
+  - Overhauled web dashboard (`index.html`, `styles.css`, `app.js`):
+    - Removed all AI-made cliches: cartoonish glowing box-shadows, oversized empty cards, fake hype badges, and bouncy animations.
+    - Implemented high-density SRE theme (neutral slate, high contrast, monospace metrics and IDs).
+    - Added live SVG mini-sparkline graphs inside telemetry cards (rolling 25-sample history).
+    - Added real-time control plane ping latency meter (`Ping: 8ms`) and connection health indicator.
+    - Added keyboard shortcuts (`?` for CLI cheat-sheet modal, `/` for search, `Esc` to close drawers, `1`-`8` to switch tabs).
+    - Added interactive Command Palette / CLI cheat-sheet modal with one-click copy buttons and toast feedback.
+    - Added search inputs and filter pills for Docker containers (`ALL`, `RUNNING`, `CRASH/STOPPED`) and Incidents (`ALL`, `ACTIVE`, `CRITICAL`, `NEEDS APPROVAL`, `RESOLVED`).
+    - Added progress bars for storage partitions, node CPU/RAM usage, and canary rollout traffic steps.
+    - Added live autonomous event console with level filtering (`ALL`, `CRIT`, `WARN`, `INFO`) and autoscroll pause/lock.
+  - Added `tests/test_client_and_cli.py` (5 tests) verifying agent telemetry sampling, cluster mesh registration, heartbeats, node draining, and CLI subcommands.
+- **Why:** Delivers real-world production packaging and ergonomics that DevOps engineers and SREs expect from enterprise tools like Datadog, Prometheus, or HashiCorp Consul.
+- **Validation:** Executed full test suite: `PYTHONPATH=. .venv/bin/pytest tests/ -v`. All 56 tests passed in 8.89s.
+- **Limitations:** None.
+
+---
+
 ## 2026-10-24T23:55:00+05:30 — Aegis AI v2.0.0: Distributed Cluster Mesh, Automated Canary Rollbacks, Alert Storm Dispatcher & RBAC
 
 - **Changed:**

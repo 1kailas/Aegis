@@ -2,7 +2,7 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Version: 2.0.0](https://img.shields.io/badge/version-2.0.0-blue.svg)]()
-[![Tests Passing](https://img.shields.io/badge/tests-51%2F51%20passed-brightgreen.svg)]()
+[![Tests Passing](https://img.shields.io/badge/tests-56%2F56%20passed-brightgreen.svg)]()
 [![Prometheus Ready](https://img.shields.io/badge/prometheus-%2Fmetrics-orange.svg)]()
 [![Security: Hardened](https://img.shields.io/badge/security-hardened-blue.svg)](SECURITY.md)
 [![Agents: Devin Protocol](https://img.shields.io/badge/agents-Devin%20protocol-purple.svg)](AGENTS.md)
@@ -205,44 +205,72 @@ Aegis strictly enforces ten operational invariants:
 
 ---
 
-## Installation & Quick Start
+## Installation & Production Deployment
 
-### Prerequisites
-- Linux OS (Ubuntu 22.04+, Debian 12+, Fedora, Arch, or WSL2)
-- Python 3.11 or higher
-- Git
-- *Optional*: Docker daemon, Kubernetes (`~/.kube/config`), Ollama, GitHub CLI (`gh`)
+### Option 1: Automated One-Line Linux Installer
+```bash
+# Automated installer creates virtualenv, links CLI binaries and sets up systemd
+./scripts/install.sh --role all
+```
 
-### Setup Instructions
-
+### Option 2: Python / Pip Editable Setup
 ```bash
 # 1. Clone the repository
 git clone https://github.com/1kailas/Aegis.git
 cd Aegis
 
-# 2. Create and activate a Python virtual environment
+# 2. Create and activate a Python 3.11+ virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
 
-# 3. Install dependencies in editable mode
+# 3. Install in editable mode (installs aegis, aegis-server, and aegis-agent)
 pip install -e .
-
-# 4. Configure environment variables (optional cloud fallback)
-cp .env.example .env
-# Edit .env to add GEMINI_API_KEY or DEVIN_API_KEY if desired
 ```
 
-### Running Aegis
-
+### Option 3: Docker Compose
 ```bash
-# Start the Aegis control plane and dashboard
-python -m aegis.main
+docker-compose up -d
 ```
 
-The web dashboard is immediately accessible at:
-👉 **`http://localhost:8000`**
+---
 
-Interactive API documentation (Swagger UI) is available at:
+## Client & Server Architecture
+
+Aegis is packaged as a real distributed client-server platform:
+
+### 1. Aegis Server (`aegis-server` or `aegis server`)
+Runs the centralized control plane, SQLite WAL database, high-density web dashboard, self-healing orchestrator, and cluster coordinator:
+```bash
+aegis-server --host 0.0.0.0 --port 8000
+```
+- Dashboard UI: **`http://localhost:8000`**
+- OpenAPI Docs: **`http://localhost:8000/api/docs`**
+- Prometheus Scrape: **`http://localhost:8000/metrics`**
+
+### 2. Aegis Agent (`aegis-agent` or `aegis agent`)
+Lightweight background daemon installed on worker nodes. Gathers local system metrics and streams authenticated telemetry heartbeats into the cluster mesh:
+```bash
+# Basic run pointing to control plane:
+aegis-agent --server http://192.168.1.50:8000
+
+# With RBAC token and custom labels:
+aegis-agent --server http://192.168.1.50:8000 --token aegis_sec_... --labels role=gpu-worker,zone=us-east-1
+```
+
+### 3. Aegis Developer CLI (`aegis`)
+Full command-line tooling for SREs and developers:
+```bash
+aegis status                   # High-density terminal dashboard of health and guardians
+aegis nodes list               # List all registered cluster mesh nodes and capacities
+aegis nodes drain <node_id>    # Cordon and drain a node before maintenance
+aegis incidents list           # List active, contained, or repairing incidents
+aegis incidents diagnose <id>  # Trigger multi-tier AI root cause diagnosis
+aegis canary list              # Inspect active progressive canary rollouts
+aegis canary rollback <id>     # Instantly abort and rollback an active canary
+aegis keys create -n worker1   # Generate cryptographically hashed RBAC token
+aegis mode [autonomous|approval] # Change operating mode
+aegis estop [on|off]           # Global emergency stop kill-switch
+```
 👉 **`http://localhost:8000/docs`**
 
 ---
@@ -369,5 +397,6 @@ PYTHONPATH=. .venv/bin/pytest tests/ -v
 - **`tests/test_phase5.py` (4 tests)**: End-to-end autonomous lifecycle simulation (Detect → Diagnose → Plan → Authorize → Validate → PR → Verify Recovery), injection security hardening, operator approval mode enforcement, target-aware live probe verification, and static dashboard & OpenAPI delivery.
 - **`tests/test_v15.py` (5 tests)**: Predictive telemetry forecasting (OLS linear regression & TTE calculations), closed-loop autonomous self-healing engine (triage, auto-remediation, and dead-letter escalation), synthetic HTTP/TCP probers, Prometheus metrics exposition line protocol, and v1.5 API endpoints.
 - **`tests/test_v20.py` (5 tests)**: Distributed cluster mesh node lifecycle and draining, automated canary verification and closed-loop rollbacks, multi-channel webhook alert storm debouncing, cryptographic RBAC token generation & permission enforcement, and v2.0 API routes.
+- **`tests/test_client_and_cli.py` (5 tests)**: Aegis Agent host telemetry & capacity sampling, cluster mesh registration and authenticated heartbeats, graceful node draining on shutdown, unified `aegis` CLI subcommands (`status`, `nodes`, `incidents`, `canary`, `keys`, `mode`, `estop`).
 
-**Result: 51 passed in 7.5 seconds.**
+**Result: 56 passed in 8.8 seconds.**

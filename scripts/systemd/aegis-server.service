@@ -1,0 +1,19 @@
+[Unit]
+Description=Aegis AI Control Plane Server
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/aegis
+Environment="PATH=/opt/aegis/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
+Environment="AEGIS_CONFIG=/opt/aegis/config.yaml"
+Environment="AEGIS_POLICIES=/opt/aegis/policies.yaml"
+ExecStart=/opt/aegis/.venv/bin/aegis-server --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5s
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
