@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aegis"
-version = "0.1.0"
+version = "1.0.0"
 description = "Aegis AI - local-first autonomous infrastructure engineer for AI workloads"
 requires-python = ">=3.11"
 dependencies = [
