@@ -181,6 +181,19 @@ class MonitoringEngine(threading.Thread):
         )
         snap["resource_state"] = resource_state.as_dict()
 
+        # Workload & orchestration sampling
+        if self._tick_count % 3 == 0 or self._tick_count == 1:
+            try:
+                docker_data = ctx.docker.sample()
+                k8s_data = ctx.k8s.sample()
+                ai_data = ctx.ai_workloads.sample()
+                ctx.graph.build_from_telemetry(
+                    ctx.identity.host_id, docker_data, k8s_data, ai_data
+                )
+                self._process_workload_incidents(docker_data, k8s_data)
+            except Exception as e:
+                _LOG.debug("Workload orchestration tick error: %s", e)
+
         self._apply_policy(state, simulated, changed)
         self._maybe_prune()
 
@@ -193,6 +206,58 @@ class MonitoringEngine(threading.Thread):
                 "info",
             )
         return snap
+
+    def _process_workload_incidents(self, docker_data: dict, k8s_data: dict) -> None:
+        ctx = self.ctx
+        # Docker incidents
+        for inc in docker_data.get("incidents", []):
+            cat = inc["type"]
+            cname = inc.get("container_name", "unknown")
+            active = ctx.incidents.active_by_category(cat)
+            blast = ctx.graph.get_blast_radius(cname)
+            evidence = inc.get("evidence") or {}
+            evidence["blast_radius"] = blast
+
+            if not active:
+                new_inc = ctx.incidents.create(
+                    category=cat,
+                    severity=inc.get("severity", "warning"),
+                    title=f"Container anomaly: {cname}",
+                    summary=inc.get("summary", ""),
+                    host_id=ctx.identity.host_id,
+                    evidence=[{"kind": "docker", "detail": evidence}],
+                )
+                ctx.events.emit(
+                    "incident",
+                    f"New incident: {inc.get('summary', '')} (blast radius: {blast['blast_radius_score']})",
+                    inc.get("severity", "warning"),
+                    incident_id=new_inc["id"],
+                )
+            else:
+                ctx.incidents.append_evidence(
+                    active["id"], {"kind": "docker", "detail": evidence}
+                )
+
+        # Kubernetes incidents
+        for inc in k8s_data.get("incidents", []):
+            cat = inc["type"]
+            res = inc.get("resource", "k8s")
+            active = ctx.incidents.active_by_category(cat)
+            if not active:
+                new_inc = ctx.incidents.create(
+                    category=cat,
+                    severity=inc.get("severity", "critical"),
+                    title=f"Kubernetes failure: {res}",
+                    summary=inc.get("summary", ""),
+                    host_id=ctx.identity.host_id,
+                    evidence=[{"kind": "kubernetes", "detail": inc.get("evidence")}],
+                )
+                ctx.events.emit(
+                    "incident",
+                    f"New k8s incident: {inc.get('summary', '')}",
+                    inc.get("severity", "critical"),
+                    incident_id=new_inc["id"],
+                )
 
     # -- policy hooks -------------------------------------------------------
     def _apply_policy(self, state: Any, simulated: bool, changed: bool) -> None:

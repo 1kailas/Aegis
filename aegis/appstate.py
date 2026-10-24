@@ -25,6 +25,10 @@ from aegis.config import AppConfig
 from aegis.control_plane.policy import PolicyExecutor
 from aegis.control_plane.resource_guardian import ResourceGuardian, ResourcePolicy
 from aegis.control_plane.thermal_guardian import ThermalGuardian
+from aegis.orchestration.ai_workloads import AIWorkloadMonitor
+from aegis.orchestration.dependency_graph import DependencyGraph
+from aegis.orchestration.docker_adapter import DockerAdapter
+from aegis.orchestration.k8s_adapter import KubernetesAdapter
 from aegis.db import Database, utcnow
 from aegis.events import EventBus
 from aegis.incidents import IncidentStore
@@ -116,6 +120,10 @@ class AppContext:
         self.processes = ProcessCollector()
         self.storage = StorageCollector()
         self.inventory = InventoryCollector(self.identity.host_id)
+        self.docker = DockerAdapter()
+        self.k8s = KubernetesAdapter()
+        self.ai_workloads = AIWorkloadMonitor(ollama_url=config.models.ollama_url)
+        self.graph = DependencyGraph()
         self.incidents = IncidentStore(self.db)
 
         self.flags = RuntimeFlags(config, self.db)
@@ -262,6 +270,9 @@ class AppContext:
             "thermal": guardian,
             "resources": self.resource_guardian.state.as_dict(),
             "gpu": self.gpu.sample(),
+            "docker": self.docker.sample(),
+            "kubernetes": self.k8s.sample(),
+            "ai_workloads": self.ai_workloads.sample(),
             "events": [e.__dict__ for e in self.events.latest(10)],
             "overrides_enabled": self.config.monitoring.simulated_overrides_enabled,
             "active_overrides": {

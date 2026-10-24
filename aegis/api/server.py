@@ -180,6 +180,55 @@ def create_app(ctx: AppContext) -> FastAPI:
             "policy": ctx.config.resource_policy.model_dump(),
         }
 
+    # -------------------------------------------------------- workloads & orchestration
+    @app.get("/api/workloads/docker")
+    def workloads_docker() -> dict[str, Any]:
+        return ctx.docker.sample()
+
+    @app.get("/api/workloads/docker/{container_id}/logs")
+    def workloads_docker_logs(container_id: str, tail: int = 100) -> dict[str, str]:
+        return {"container_id": container_id, "logs": ctx.docker.get_container_logs(container_id, tail=min(tail, 500))}
+
+    @app.post("/api/workloads/docker/{container_id}/restart", dependencies=[Depends(_auth_dp(ctx))])
+    def workloads_docker_restart(container_id: str) -> dict[str, Any]:
+        mode = "dry_run" if ctx.flags.mode == "monitoring_only" else "real"
+        if ctx.flags.emergency_stop:
+            raise HTTPException(status_code=403, detail="Emergency stop engaged; container restart blocked")
+        result = ctx.docker.restart_container(container_id, mode=mode)
+        ctx.db.execute(
+            "INSERT INTO audit_log(ts, actor, action, subject, detail) VALUES(?,?,?,?,?)",
+            (utcnow(), "operator", f"docker_restart_{mode}", container_id, str(result)),
+        )
+        return result
+
+    @app.get("/api/workloads/k8s")
+    def workloads_k8s() -> dict[str, Any]:
+        return ctx.k8s.sample()
+
+    @app.post("/api/workloads/k8s/{namespace}/{name}/restart", dependencies=[Depends(_auth_dp(ctx))])
+    def workloads_k8s_restart(namespace: str, name: str) -> dict[str, Any]:
+        mode = "dry_run" if ctx.flags.mode == "monitoring_only" else "real"
+        if ctx.flags.emergency_stop:
+            raise HTTPException(status_code=403, detail="Emergency stop engaged; k8s restart blocked")
+        result = ctx.k8s.rollout_restart_deployment(namespace, name, mode=mode)
+        ctx.db.execute(
+            "INSERT INTO audit_log(ts, actor, action, subject, detail) VALUES(?,?,?,?,?)",
+            (utcnow(), "operator", f"k8s_restart_{mode}", f"{namespace}/{name}", str(result)),
+        )
+        return result
+
+    @app.get("/api/workloads/ai")
+    def workloads_ai() -> dict[str, Any]:
+        return ctx.ai_workloads.sample()
+
+    @app.get("/api/workloads/graph")
+    def workloads_graph() -> dict[str, Any]:
+        return ctx.graph.as_dict()
+
+    @app.get("/api/workloads/blast_radius")
+    def workloads_blast_radius(target: str) -> dict[str, Any]:
+        return ctx.graph.get_blast_radius(target)
+
     @app.get("/api/thermal")
     def thermal() -> dict[str, Any]:
         rows = ctx.db.query(
