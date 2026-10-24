@@ -112,11 +112,13 @@ class ThermalGuardian:
                 self._hold_without_data(stale_sensors)
             else:
                 sensor_id, current = max(fresh.items(), key=lambda kv: kv[1])
-                self._advance(now, sensor_id, current)
+                self._advance(now, sensor_id, current, stale_sensors)
             return self._state
 
     # -- internals ----------------------------------------------------------
-    def _advance(self, now: float, sensor_id: str, current: float) -> GuardianState:
+    def _advance(
+        self, now: float, sensor_id: str, current: float, stale_sensors: list[str] | None = None
+    ) -> GuardianState:
         cfg = self.cfg
         prev = self._state.state
         slope = self._trend(sensor_id, now)

@@ -13,12 +13,17 @@ import threading
 import time
 from typing import TYPE_CHECKING
 
+from aegis.collectors.gpu import GpuCollector
 from aegis.collectors.hardware import HardwareCollector, host_identity
+from aegis.collectors.inventory import InventoryCollector
 from aegis.collectors.overrides import OverrideStore
+from aegis.collectors.processes import ProcessCollector
 from aegis.collectors.sensor_registry import SensorRegistry
+from aegis.collectors.storage import StorageCollector
 from aegis.collectors.system_metrics import MetricsCollector
 from aegis.config import AppConfig
 from aegis.control_plane.policy import PolicyExecutor
+from aegis.control_plane.resource_guardian import ResourceGuardian, ResourcePolicy
 from aegis.control_plane.thermal_guardian import ThermalGuardian
 from aegis.db import Database, utcnow
 from aegis.events import EventBus
@@ -107,6 +112,10 @@ class AppContext:
             self.identity.host_id,
             history_points_max=config.monitoring.history_points_max,
         )
+        self.gpu = GpuCollector()
+        self.processes = ProcessCollector()
+        self.storage = StorageCollector()
+        self.inventory = InventoryCollector(self.identity.host_id)
         self.incidents = IncidentStore(self.db)
 
         self.flags = RuntimeFlags(config, self.db)
@@ -115,6 +124,24 @@ class AppContext:
             self.identity.host_id,
             self.events,
             on_transition=self._record_transition,
+        )
+        r_pol = ResourcePolicy(
+            memory_warning_pct=config.resource_policy.memory_warning_pct,
+            memory_critical_pct=config.resource_policy.memory_critical_pct,
+            memory_recovery_pct=config.resource_policy.memory_recovery_pct,
+            disk_warning_pct=config.resource_policy.disk_warning_pct,
+            disk_critical_pct=config.resource_policy.disk_critical_pct,
+            disk_recovery_pct=config.resource_policy.disk_recovery_pct,
+            cpu_warning_pct=config.resource_policy.cpu_warning_pct,
+            cpu_critical_pct=config.resource_policy.cpu_critical_pct,
+            cpu_recovery_pct=config.resource_policy.cpu_recovery_pct,
+            recovery_hold_s=config.resource_policy.recovery_hold_s,
+            cooldown_s=config.resource_policy.cooldown_s,
+        )
+        self.resource_guardian = ResourceGuardian(
+            r_pol,
+            self.events,
+            on_transition=self._record_resource_transition,
         )
         self.policy = PolicyExecutor(
             config, self.db, self.events, self.incidents, self.flags
@@ -140,6 +167,45 @@ class AppContext:
             else "warning" if new == "WARNING" else "info",
             sensor_id=sensor_id, current_c=current, reason=reason,
         )
+
+    def _record_resource_transition(self, ts_epoch: float, prev: str, new: str,
+                                    reason: str, state_dict: dict) -> None:
+        self.events.emit(
+            "resource",
+            f"Resource {prev} -> {new}: {reason}",
+            "critical" if new == "CRITICAL"
+            else "warning" if new == "WARNING" else "info",
+            detail=state_dict,
+        )
+        self.db.execute(
+            "INSERT INTO audit_log(ts, actor, action, subject, detail)"
+            " VALUES(?,?,?,?,?)",
+            (utcnow(), "resource_guardian", f"transition_{new}", "host_resources",
+             str(state_dict)),
+        )
+        if new in ("WARNING", "CRITICAL"):
+            active = self.incidents.active_by_category("resource_saturation")
+            if not active:
+                self.incidents.create(
+                    category="resource_saturation",
+                    severity="warning" if new == "WARNING" else "critical",
+                    title="System resource threshold breach",
+                    summary=reason,
+                    host_id=self.identity.host_id,
+                    evidence=[{"kind": "resource", "state": state_dict, "note": reason}],
+                )
+            else:
+                self.incidents.append_evidence(
+                    active["id"],
+                    {"kind": "resource", "state": state_dict, "note": reason},
+                )
+        elif new == "NORMAL":
+            active = self.incidents.active_by_category("resource_saturation")
+            if active and active["state"] in ("DETECTED", "INVESTIGATING", "CONTAINED"):
+                self.incidents.transition(
+                    active["id"], "RESOLVED", "resource_guardian",
+                    note="All resources returned within nominal bounds",
+                )
 
     # -- persisted toggles ---------------------------------------------------
     def set_mode(self, value: str) -> None:
@@ -194,6 +260,8 @@ class AppContext:
             "latest": history[-1][1] if history else None,
             "latest_validity": history[-1][2] if history else "NO_DATA",
             "thermal": guardian,
+            "resources": self.resource_guardian.state.as_dict(),
+            "gpu": self.gpu.sample(),
             "events": [e.__dict__ for e in self.events.latest(10)],
             "overrides_enabled": self.config.monitoring.simulated_overrides_enabled,
             "active_overrides": {

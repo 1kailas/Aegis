@@ -81,6 +81,21 @@ class ThermalPolicyConfig(BaseModel):
         return max(3, v)
 
 
+class ResourcePolicyConfig(BaseModel):
+    """Deterministic thresholds for memory, disk, and CPU resource safety."""
+    memory_warning_pct: float = 85.0
+    memory_critical_pct: float = 95.0
+    memory_recovery_pct: float = 75.0
+    disk_warning_pct: float = 85.0
+    disk_critical_pct: float = 95.0
+    disk_recovery_pct: float = 80.0
+    cpu_warning_pct: float = 90.0
+    cpu_critical_pct: float = 98.0
+    cpu_recovery_pct: float = 75.0
+    recovery_hold_s: float = 30.0
+    cooldown_s: float = 60.0
+
+
 class ThermalActionsConfig(BaseModel):
     warning_actions: list[str] = Field(
         default_factory=lambda: ["increase_sampling", "create_or_update_incident"]
@@ -102,6 +117,7 @@ class AppConfig(BaseModel):
     server: ServerConfig
     logging: LogConfig
     thermal_policy: ThermalPolicyConfig
+    resource_policy: ResourcePolicyConfig = Field(default_factory=ResourcePolicyConfig)
     action_policy: ThermalActionsConfig
     emergency_stop: bool = False
 
@@ -139,7 +155,18 @@ def _secret_from_env(name: str) -> str | None:
         for line in dotenv.read_text().splitlines():
             line = line.strip()
             if line.startswith(f"{name}="):
-                return line.split("=", 1)[1].strip() or None
+                val = line.split("=", 1)[1].strip()
+                if val:
+                    return val
+    if name == "GITHUB_TOKEN":
+        # Fallback to local gh CLI if already authenticated
+        try:
+            import subprocess
+            res = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, timeout=2.0)
+            if res.returncode == 0 and res.stdout.strip():
+                return res.stdout.strip()
+        except Exception:
+            pass
     return None
 
 
@@ -161,6 +188,7 @@ def load_config(
             server=ServerConfig(**(cfg_raw.get("server") or {})),
             logging=LogConfig(**(cfg_raw.get("logging") or {})),
             thermal_policy=ThermalPolicyConfig(**(pol_raw.get("thermal") or {})),
+            resource_policy=ResourcePolicyConfig(**(pol_raw.get("resources") or {})),
             action_policy=ThermalActionsConfig(**(pol_raw.get("actions") or {})),
             emergency_stop=bool(pol_raw.get("emergency_stop", False)),
         )

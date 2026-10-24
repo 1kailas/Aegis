@@ -145,7 +145,20 @@ class MonitoringEngine(threading.Thread):
             ("swap_percent", snap["swap"]["percent"], "pct"),
             ("net_recv_bps", (snap.get("net_io") or {}).get("recv_bytes_s"), "B/s"),
             ("net_sent_bps", (snap.get("net_io") or {}).get("sent_bytes_s"), "B/s"),
+            ("disk_read_bps", (snap.get("disk_io") or {}).get("read_bytes_s"), "B/s"),
+            ("disk_write_bps", (snap.get("disk_io") or {}).get("write_bytes_s"), "B/s"),
+            ("disk_read_latency_ms", (snap.get("disk_io") or {}).get("read_latency_ms"), "ms"),
+            ("disk_write_latency_ms", (snap.get("disk_io") or {}).get("write_latency_ms"), "ms"),
+            ("cpu_freq_mhz", (snap.get("cpu_freq") or {}).get("current_mhz"), "MHz"),
         ]
+        pressure = snap.get("pressure") or {}
+        if pressure.get("memory"):
+            rows.append(("psi_mem_avg10", pressure["memory"].get("some_avg10"), "pct"))
+        if pressure.get("cpu"):
+            rows.append(("psi_cpu_avg10", pressure["cpu"].get("some_avg10"), "pct"))
+        if pressure.get("io"):
+            rows.append(("psi_io_avg10", pressure["io"].get("some_avg10"), "pct"))
+
         for t in temp_readings:
             if t["value"] is not None:
                 rows.append((f"temp_{t['sensor_id']}", float(t["value"]), "degC"))
@@ -157,6 +170,16 @@ class MonitoringEngine(threading.Thread):
         state = ctx.guardian.evaluate()
         ctx.flags.guardian_state = state.state
         changed = state.state != prev_state
+
+        # Resource safety check
+        disks_data = [d.__dict__ if hasattr(d, "__dict__") else d for d in snap.get("disks", [])]
+        resource_state = ctx.resource_guardian.evaluate(
+            cpu_pct=float(snap.get("cpu_percent") or 0.0),
+            mem_pct=float(snap["memory"]["percent"]),
+            disks=disks_data,
+            throttling=snap.get("throttling"),
+        )
+        snap["resource_state"] = resource_state.as_dict()
 
         self._apply_policy(state, simulated, changed)
         self._maybe_prune()

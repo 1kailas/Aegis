@@ -140,6 +140,46 @@ def create_app(ctx: AppContext) -> FastAPI:
         return {"ts": [p[0] for p in pts], **series,
                 "interval_s": ctx.flags.active_interval_s}
 
+    @app.get("/api/telemetry/metrics")
+    def telemetry_metrics() -> list[str]:
+        return ctx.db.list_metrics()
+
+    @app.get("/api/telemetry/query")
+    def telemetry_query(
+        metric: str | None = None,
+        start_ts: str | None = None,
+        end_ts: str | None = None,
+        aggregate: bool = False,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        if aggregate and metric:
+            return ctx.db.query_telemetry_aggregated(metric=metric, limit=min(limit, 500))
+        return ctx.db.query_telemetry(metric=metric, start_ts=start_ts, end_ts=end_ts, limit=min(limit, 1000))
+
+    # ------------------------------------------------------------------ system
+    @app.get("/api/system/gpu")
+    def system_gpu() -> dict[str, Any]:
+        return ctx.gpu.sample()
+
+    @app.get("/api/system/processes")
+    def system_processes() -> dict[str, Any]:
+        return ctx.processes.sample()
+
+    @app.get("/api/system/storage")
+    def system_storage() -> dict[str, Any]:
+        return ctx.storage.sample()
+
+    @app.get("/api/system/inventory")
+    def system_inventory() -> dict[str, Any]:
+        return ctx.inventory.sample()
+
+    @app.get("/api/system/resources")
+    def system_resources() -> dict[str, Any]:
+        return {
+            "state": ctx.resource_guardian.state.as_dict(),
+            "policy": ctx.config.resource_policy.model_dump(),
+        }
+
     @app.get("/api/thermal")
     def thermal() -> dict[str, Any]:
         rows = ctx.db.query(

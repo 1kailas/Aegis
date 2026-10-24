@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aegis AI — Operations</title>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="logo">⛨</span> Aegis <small id="ver"></small></div>
+  <div class="health" id="health"><span class="dot dot-warn"></span><span>connecting…</span></div>
+  <div class="spacer"></div>
+  <label class="switch" title="Monitoring-only shows incidents & alerts; policy-autonomous enables bounded automatic responses">
+    <input type="checkbox" id="modeToggle">
+    <span class="slider"></span>
+    <span id="modeLabel" class="mode-label">monitoring_only</span>
+  </label>
+  <button id="estopBtn" class="btn danger" title="Blocks new autonomous remediation actions; telemetry and alerting stay active">Emergency stop</button>
+</header>
+
+<main>
+  <section class="cards" id="cards">
+    <div class="card" id="card-cpu"><h3>CPU</h3><div class="big" id="cpuVal">–</div><div class="sub" id="cpuSub"></div></div>
+    <div class="card" id="card-mem"><h3>Memory</h3><div class="big" id="memVal">–</div><div class="sub" id="memSub"></div></div>
+    <div class="card" id="card-thermal"><h3>Thermal Guardian</h3>
+      <div class="big" id="thermalState">–</div><div class="sub" id="thermalSub"></div>
+      <div class="chip-row" id="thermalQual"></div>
+    </div>
+    <div class="card" id="card-disk"><h3>Disks</h3><div class="big" id="diskVal">–</div><div class="sub" id="diskSub"></div></div>
+    <div class="card" id="card-net"><h3>Network</h3><div class="big" id="netVal">–</div><div class="sub" id="netSub"></div></div>
+  </section>
+
+  <section class="grid-2">
+    <div class="panel">
+      <h2>System history</h2>
+      <canvas id="chart-main" height="200" aria-label="CPU and memory history chart"></canvas>
+      <div class="legend"><span class="k cpu"></span> CPU % &nbsp; <span class="k mem"></span> RAM %</div>
+    </div>
+    <div class="panel">
+      <h2>Temperatures <span class="muted" id="tempHint"></span></h2>
+      <div id="tempList" class="temp-list"></div>
+    </div>
+  </section>
+
+  <section class="grid-2">
+    <div class="panel">
+      <h2>Sensor inventory</h2>
+      <table class="tbl" id="sensorTbl">
+        <thead><tr><th>Sensor</th><th>Kind</th><th>Source</th><th>Value</th><th>Validity</th><th>Updated</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <h2>Recent events <span class="live-dot" title="live stream"></span></h2>
+      <div class="events" id="events"></div>
+    </div>
+  </section>
+
+  <section class="panel demo" id="demoPanel">
+    <h2>Simulated fault injection <span class="tag">SIMULATED</span></h2>
+    <p class="muted">Injected sensor values exist for demos and tests. They are separate from real hardware telemetry, always labelled <code>SIMULATED_OVERRIDE</code>, and only address-safe policy actions are permitted from them.</p>
+    <div class="btn-row" id="demoBtns"></div>
+    <div id="demoActive" class="muted"></div>
+  </section>
+
+  <noscript>Aegis dashboard requires JavaScript to fetch live API data.</noscript>
+</main>
+
+<footer>
+  <span id="footNote"></span>
+  <span class="spacer"></span>
+  <a href="/api/docs" target="_blank">API docs</a>
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

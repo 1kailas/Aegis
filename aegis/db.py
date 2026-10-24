@@ -134,17 +134,70 @@ class Database:
 
     def prune_telemetry(self, retention_hours: int) -> int:
         """Delete metric history older than the retention horizon."""
-        cutoff_epoch = datetime.now(timezone.utc).timestamp() - retention_hours * 3600
+        cutoff_epoch = datetime.now(timezone.utc).timestamp() - (retention_hours * 3600)
         cutoff = datetime.fromtimestamp(cutoff_epoch, timezone.utc).isoformat(
-            timespec="seconds")
+            timespec="milliseconds")
         with self.tx() as conn:
-            cur = conn.execute("DELETE FROM telemetry WHERE ts < ?", (cutoff,))
-            conn.execute("DELETE FROM metric_snapshots WHERE ts < ?", (cutoff,))
-            return cur.rowcount
+            cur1 = conn.execute("DELETE FROM telemetry WHERE ts <= ?", (cutoff,))
+            c1 = cur1.rowcount
+            cur2 = conn.execute("DELETE FROM metric_snapshots WHERE ts <= ?", (cutoff,))
+            return c1 + cur2.rowcount
 
     def db_integrity(self) -> str:
         row = self.query_one("PRAGMA integrity_check")
         return row[0] if row else "unknown"
+
+    def list_metrics(self) -> list[str]:
+        rows = self.query("SELECT DISTINCT metric FROM telemetry ORDER BY metric ASC")
+        return [r["metric"] for r in rows]
+
+    def query_telemetry(
+        self,
+        metric: str | None = None,
+        start_ts: str | None = None,
+        end_ts: str | None = None,
+        limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        clauses = []
+        params = []
+        if metric:
+            clauses.append("metric = ?")
+            params.append(metric)
+        if start_ts:
+            clauses.append("ts >= ?")
+            params.append(start_ts)
+        if end_ts:
+            clauses.append("ts <= ?")
+            params.append(end_ts)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        sql = f"SELECT ts, host_id, metric, value, unit, source FROM telemetry {where} ORDER BY ts DESC LIMIT ?"
+        params.append(limit)
+        rows = self.query(sql, params)
+        return [dict(r) for r in reversed(rows)]
+
+    def query_telemetry_aggregated(
+        self,
+        metric: str,
+        limit: int = 60,
+    ) -> list[dict[str, Any]]:
+        """Aggregates telemetry points into recent buckets with min, max, avg."""
+        sql = """
+            SELECT
+                SUBSTR(ts, 1, 16) AS time_bucket,
+                metric,
+                COUNT(*) as count,
+                ROUND(AVG(value), 2) as avg_value,
+                ROUND(MIN(value), 2) as min_value,
+                ROUND(MAX(value), 2) as max_value,
+                MAX(unit) as unit
+            FROM telemetry
+            WHERE metric = ? AND value IS NOT NULL
+            GROUP BY time_bucket, metric
+            ORDER BY time_bucket DESC
+            LIMIT ?
+        """
+        rows = self.query(sql, (metric, limit))
+        return [dict(r) for r in reversed(rows)]
 
     def close(self) -> None:
         with self._lock:

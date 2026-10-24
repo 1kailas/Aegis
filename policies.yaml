@@ -30,6 +30,19 @@ thermal:
   slope_min_for_estimate: 0.05   # deg/s
   min_points_for_slope: 5
 
+resources:
+  memory_warning_pct: 85.0
+  memory_critical_pct: 95.0
+  memory_recovery_pct: 75.0
+  disk_warning_pct: 85.0
+  disk_critical_pct: 95.0
+  disk_recovery_pct: 80.0
+  cpu_warning_pct: 90.0
+  cpu_critical_pct: 98.0
+  cpu_recovery_pct: 75.0
+  recovery_hold_s: 30.0
+  cooldown_s: 60.0
+
 actions:
   warning_actions:
     - increase_sampling
