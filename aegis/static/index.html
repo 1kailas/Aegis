@@ -3,777 +3,796 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Aegis AI — SRE Control Plane</title>
+<title>Aegis AI — Control Plane</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234f8ef7' stroke-width='2'><path d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/></svg>">
 <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
 
+<!-- ═══════════════════════════════════════════════════════════
+     TOPBAR
+═══════════════════════════════════════════════════════════ -->
 <header class="topbar">
-  <div class="brand">
-    <span class="logo">⛨</span>
-    <span>Aegis AI</span>
-    <span class="badge-ver">v3.1.0</span>
-  </div>
+  <a class="topbar-brand" href="/">
+    <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    </svg>
+    <span class="brand-name">Aegis</span>
+    <span class="brand-ver">v3.1.0</span>
+  </a>
 
-  <div class="ping-meter" id="pingMeter" title="Live roundtrip latency to Aegis Control Plane">
-    <span class="dot dot-ok" id="pingDot"></span>
-    <span id="pingVal">--ms</span>
-  </div>
-
-  <nav class="nav-tabs" id="navTabs">
+  <nav class="topbar-nav" id="navTabs">
     <button class="nav-btn active" data-tab="overview">Overview</button>
-    <button class="nav-btn" data-tab="cluster">Cluster Mesh <span class="badge info" id="clusterTabBadge" style="display:none; font-size:0.65rem; padding:1px 5px;">0</span></button>
-    <button class="nav-btn" data-tab="models">Model Hub &amp; Deployer <span class="badge ok" style="font-size:0.65rem; padding:1px 5px;">v3.1</span></button>
+    <button class="nav-btn" data-tab="cluster">
+      Cluster
+      <span class="nav-count info" id="clusterTabBadge" style="display:none">0</span>
+    </button>
+    <button class="nav-btn" data-tab="models">Model Hub</button>
     <button class="nav-btn" data-tab="workloads">Docker &amp; K8s</button>
-    <button class="nav-btn" data-tab="incidents">Incidents <span class="badge crit" id="incTabBadge" style="display:none; font-size:0.65rem; padding:1px 5px;">0</span></button>
-    <button class="nav-btn" data-tab="hardware">Hardware &amp; PSI</button>
+    <button class="nav-btn" data-tab="incidents">
+      Incidents
+      <span class="nav-count" id="incTabBadge" style="display:none">0</span>
+    </button>
+    <button class="nav-btn" data-tab="hardware">Hardware</button>
     <button class="nav-btn" data-tab="ai">AI Serving</button>
     <button class="nav-btn" data-tab="engineering">Devin &amp; PRs</button>
     <button class="nav-btn" data-tab="policy">Policy &amp; Audit</button>
   </nav>
 
-  <div class="spacer"></div>
+  <div class="topbar-right">
+    <div class="ping-chip">
+      <span class="ping-dot" id="pingDot"></span>
+      <span id="pingVal">–</span>
+    </div>
 
-  <div class="topbar-actions">
-    <input type="text" id="globalSearch" class="search-input" placeholder="Search (Press '/' to focus)..." aria-label="Global search">
+    <a href="/documentation" class="btn sm">Docs</a>
+    <button class="btn sm" id="cliDocsBtn" title="CLI Reference [?]">CLI</button>
 
-    <a href="/documentation" class="btn sm primary" style="text-decoration:none; display:flex; align-items:center; gap:4px;" title="Open Complete A-Z Documentation Portal">
-      <span>📖 Documentation</span>
-    </a>
+    <div class="mode-toggle-wrap">
+      <label class="toggle" title="Toggle autonomous policy mode">
+        <input type="checkbox" id="modeToggle">
+        <span class="toggle-track"></span>
+      </label>
+      <span class="mode-label" id="modeLabel">monitoring</span>
+    </div>
 
-    <button id="cliDocsBtn" class="btn sm" title="Open CLI cheat-sheet (Shortcut: ?)">
-      <span>CLI [?]</span>
-    </button>
-
-    <label class="switch" title="Operational Mode: Toggle between bounded autonomous execution and manual operator approval">
-      <input type="checkbox" id="modeToggle">
-      <span class="slider"></span>
-      <span id="modeLabel" class="mode-label">monitoring_only</span>
-    </label>
-
-    <button id="estopBtn" class="btn danger sm" title="Global Emergency Stop: Blocks all autonomous remediations host-wide">
-      <span>E-STOP</span>
-    </button>
+    <button id="estopBtn" class="btn danger sm" title="Emergency stop — blocks all autonomous actions">E-STOP</button>
   </div>
 </header>
 
 <main>
 
-  <!-- TAB 1: OVERVIEW -->
-  <section class="tab-content active" id="tab-overview">
-    <div id="incidentBanner" class="panel" style="display:none; background:var(--crit-bg); border-color:var(--crit);"></div>
+<!-- ═══════════════════════════════════════════════════════════
+     TAB 1: OVERVIEW
+═══════════════════════════════════════════════════════════ -->
+<section class="tab-content active" id="tab-overview">
 
-    <!-- Telemetry Cards with Live Sparklines -->
-    <div class="cards">
-      <div class="card" id="card-cpu">
-        <div class="card-header">
-          <h3>CPU Compute</h3>
-          <svg class="sparkline-svg" id="spark-cpu" viewBox="0 0 90 28"><path class="sparkline-path" d=""/></svg>
-        </div>
-        <div class="card-body">
-          <div class="big" id="cpuVal">–</div>
-        </div>
-        <div class="sub" id="cpuSub">Cores &amp; Load Avg</div>
-      </div>
+  <!-- Incident Alert -->
+  <div class="incident-banner" id="incidentBanner">
+    <span class="status-dot crit"></span>
+    <span id="incidentBannerText"></span>
+    <button class="btn sm danger" onclick="switchTab('incidents')">View Incidents</button>
+  </div>
 
-      <div class="card" id="card-mem">
-        <div class="card-header">
-          <h3>Memory (RAM)</h3>
-          <svg class="sparkline-svg" id="spark-mem" viewBox="0 0 90 28"><path class="sparkline-path" d=""/></svg>
-        </div>
-        <div class="card-body">
-          <div class="big" id="memVal">–</div>
-        </div>
-        <div class="sub" id="memSub">Used / Total</div>
-      </div>
-
-      <div class="card" id="card-thermal">
-        <div class="card-header">
-          <h3>Thermal Guardian</h3>
-          <span class="badge ok" id="thermalStateBadge">NOMINAL</span>
-        </div>
-        <div class="card-body">
-          <div class="big" id="thermalState">–</div>
-        </div>
-        <div class="sub" id="thermalSub">Rate of Rise &amp; Margin</div>
-      </div>
-
-      <div class="card" id="card-disk">
-        <div class="card-header">
-          <h3>Root Storage</h3>
-        </div>
-        <div class="card-body">
-          <div class="big" id="diskVal">–</div>
-        </div>
-        <div class="sub" id="diskSub">Partition Capacity</div>
-      </div>
-
-      <div class="card" id="card-net">
-        <div class="card-header">
-          <h3>Network Throughput</h3>
-        </div>
-        <div class="card-body">
-          <div class="big" id="netVal">–</div>
-        </div>
-        <div class="sub" id="netSub">RX / TX Rate</div>
-      </div>
-
-      <div class="card" id="card-gpu">
-        <div class="card-header">
-          <h3>Hardware Accelerators</h3>
-        </div>
-        <div class="card-body">
-          <div class="big" id="gpuVal">–</div>
-        </div>
-        <div class="sub" id="gpuSub">GPU / VRAM Status</div>
-      </div>
+  <!-- Metric Cards -->
+  <div class="metric-grid">
+    <div class="metric-card" id="card-cpu">
+      <div class="metric-label">CPU</div>
+      <div class="metric-val" id="cpuVal">–</div>
+      <div class="metric-sub" id="cpuSub">–</div>
+      <svg class="metric-spark" width="90" height="32" viewBox="0 0 90 32" id="spark-cpu">
+        <path class="sparkline-path" d=""/>
+      </svg>
     </div>
 
-    <!-- History Chart & Console Grid -->
-    <div class="grid-2">
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Host Telemetry History (Last 10m)</h2>
-          <div class="panel-actions">
-            <span style="font-size:0.75rem; color:var(--muted);"><span style="color:var(--info);">■</span> CPU % &nbsp; <span style="color:var(--ok);">■</span> RAM %</span>
-          </div>
-        </div>
-        <canvas id="chart-main" height="200" aria-label="System History Chart" style="width:100%;"></canvas>
-      </div>
-
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Autonomous Event Stream <span class="dot dot-ok" style="margin-left:4px;" title="Connected to SSE"></span></h2>
-          <div class="panel-actions">
-            <div class="filter-group" id="eventFilterGroup">
-              <button class="filter-btn active" data-filter="ALL">ALL</button>
-              <button class="filter-btn" data-filter="CRIT">CRIT</button>
-              <button class="filter-btn" data-filter="WARN">WARN</button>
-              <button class="filter-btn" data-filter="INFO">INFO</button>
-            </div>
-            <button class="btn sm" id="pauseEventsBtn" title="Toggle autoscroll lock">Pause</button>
-          </div>
-        </div>
-        <div class="events-console" id="events"></div>
-      </div>
+    <div class="metric-card" id="card-mem">
+      <div class="metric-label">Memory</div>
+      <div class="metric-val" id="memVal">–</div>
+      <div class="metric-sub" id="memSub">–</div>
+      <svg class="metric-spark" width="90" height="32" viewBox="0 0 90 32" id="spark-mem">
+        <path class="sparkline-path" d=""/>
+      </svg>
     </div>
 
-    <!-- Quick Operational Status -->
-    <div class="grid-2">
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Discovered Containers &amp; Pods</h2>
-          <button class="btn sm" onclick="switchTab('workloads')">View All</button>
-        </div>
-        <div id="quickWorkloads" class="tbl-wrap"></div>
-      </div>
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Recent Closed-Loop Self-Healing Actions</h2>
-          <button class="btn sm" onclick="switchTab('policy')">Audit Trail</button>
-        </div>
-        <div id="quickActions" class="tbl-wrap"></div>
-      </div>
+    <div class="metric-card" id="card-thermal">
+      <div class="metric-label">Thermal</div>
+      <div class="metric-val" id="thermalVal">–</div>
+      <div class="metric-sub" id="thermalSub">–</div>
     </div>
-  </section>
 
-  <!-- TAB 2: CLUSTER MESH & CANARIES -->
-  <section class="tab-content" id="tab-cluster">
-    <!-- Quick Join Any Client Machine -->
-    <div class="panel" style="border-left: 3px solid var(--ok); background: #0c121e;">
+    <div class="metric-card" id="card-disk">
+      <div class="metric-label">Disk</div>
+      <div class="metric-val" id="diskVal">–</div>
+      <div class="metric-sub" id="diskSub">–</div>
+    </div>
+
+    <div class="metric-card" id="card-net">
+      <div class="metric-label">Network</div>
+      <div class="metric-val" id="netVal">–</div>
+      <div class="metric-sub" id="netSub">–</div>
+    </div>
+
+    <div class="metric-card" id="card-gpu">
+      <div class="metric-label">GPU</div>
+      <div class="metric-val" id="gpuVal">–</div>
+      <div class="metric-sub" id="gpuSub">–</div>
+    </div>
+  </div>
+
+  <!-- Chart + Event Stream -->
+  <div class="grid-2">
+    <div class="panel">
       <div class="panel-header">
-        <h2>Connect Any Client Machine to this Server</h2>
+        <div>
+          <div class="panel-title">Telemetry History</div>
+          <div class="panel-subtitle">Last 10 minutes</div>
+        </div>
+        <div class="chart-legend">
+          <div class="legend-item">
+            <div class="legend-dot" style="background:var(--accent)"></div>
+            <span>CPU %</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background:var(--ok)"></div>
+            <span>RAM %</span>
+          </div>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="chart-main" height="180" style="width:100%"></canvas>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="flex items-center gap-8">
+          <div class="panel-title">Event Stream</div>
+          <span class="status-dot ok" id="sseStatusDot" title="SSE Connected"></span>
+        </div>
         <div class="panel-actions">
-          <span style="font-size:0.75rem; color:var(--muted);">Server IP / Host:</span>
-          <input type="text" id="clusterHostInput" class="search-input" style="width:180px; font-family:var(--font-mono); font-weight:600;" placeholder="127.0.0.1:8000">
-        </div>
-      </div>
-      <p style="font-size:0.78rem; color:var(--muted); margin: 0 0 12px 0;">
-        Run any of these commands on your remote client device (laptop, cloud VM, bare-metal server). It automatically discovers hardware and streams telemetry heartbeats into this cluster control plane:
-      </p>
-
-      <div style="display:flex; flex-direction:column; gap:8px;">
-        <div style="background:var(--bg); border:1px solid var(--line); border-radius:4px; padding:8px 12px; display:flex; justify-content:space-between; align-items:center;">
-          <div>
-            <div style="font-size:0.7rem; color:var(--info); font-weight:600; text-transform:uppercase;">Option 1: Instant Zero-Install Run (Vanilla Python 3)</div>
-            <code id="cmdInstantRun" style="color:var(--text-bright); font-size:0.8rem;">curl -sSL http://127.0.0.1:8000/agent.py | python3 - 127.0.0.1</code>
+          <div class="filter-bar" id="eventFilterGroup">
+            <button class="filter-btn active" data-filter="ALL">All</button>
+            <button class="filter-btn" data-filter="CRIT">Crit</button>
+            <button class="filter-btn" data-filter="WARN">Warn</button>
+            <button class="filter-btn" data-filter="INFO">Info</button>
           </div>
-          <button class="btn sm" onclick="copySnippet($('cmdInstantRun').textContent)">Copy</button>
-        </div>
-
-        <div style="background:var(--bg); border:1px solid var(--line); border-radius:4px; padding:8px 12px; display:flex; justify-content:space-between; align-items:center;">
-          <div>
-            <div style="font-size:0.7rem; color:var(--ok); font-weight:600; text-transform:uppercase;">Option 2: Automated Service Install (CLI &amp; systemd daemon)</div>
-            <code id="cmdServiceInstall" style="color:var(--text-bright); font-size:0.8rem;">curl -sSL http://127.0.0.1:8000/install.sh | bash -s 127.0.0.1</code>
-          </div>
-          <button class="btn sm" onclick="copySnippet($('cmdServiceInstall').textContent)">Copy</button>
-        </div>
-
-        <div style="background:var(--bg); border:1px solid var(--line); border-radius:4px; padding:8px 12px; display:flex; justify-content:space-between; align-items:center;">
-          <div>
-            <div style="font-size:0.7rem; color:var(--warn); font-weight:600; text-transform:uppercase;">Option 3: Aegis CLI Join (If aegis is already installed)</div>
-            <code id="cmdCliJoin" style="color:var(--text-bright); font-size:0.8rem;">aegis join 127.0.0.1</code>
-          </div>
-          <button class="btn sm" onclick="copySnippet($('cmdCliJoin').textContent)">Copy</button>
+          <button class="btn sm" id="pauseEventsBtn">Pause</button>
         </div>
       </div>
+      <div class="events-console" id="events"></div>
+    </div>
+  </div>
+
+  <!-- Quick Workloads + Actions -->
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Containers &amp; Pods</div>
+        <button class="btn sm" onclick="switchTab('workloads')">View All</button>
+      </div>
+      <div class="tbl-wrap" id="quickWorkloads"></div>
     </div>
 
     <div class="panel">
       <div class="panel-header">
-        <h2>Distributed Cluster Mesh Nodes</h2>
-        <div class="panel-actions">
-          <button class="btn sm primary" id="refreshClusterBtn">Refresh Nodes</button>
-        </div>
+        <div class="panel-title">Recent Actions</div>
+        <button class="btn sm" onclick="switchTab('policy')">Audit Trail</button>
       </div>
-      <div id="clusterVitals" style="display:flex; gap:16px; margin-bottom:12px; font-size:0.8rem; color:var(--muted);"></div>
+      <div class="tbl-wrap" id="quickActions"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     TAB 2: CLUSTER MESH
+═══════════════════════════════════════════════════════════ -->
+<section class="tab-content" id="tab-cluster">
+
+  <!-- Join Panel -->
+  <div class="join-card">
+    <div class="join-header">
+      <div>
+        <div class="panel-title">Connect a Client Machine</div>
+        <div class="panel-subtitle">Run on any remote host to join the cluster mesh</div>
+      </div>
+      <div class="flex items-center gap-8">
+        <span class="text-muted text-xs">Server IP:</span>
+        <input type="text" class="input mono" id="clusterHostInput" style="width:160px" placeholder="127.0.0.1:8000">
+      </div>
+    </div>
+    <div class="join-body">
+      <div class="snippet-row">
+        <span class="snippet-label" style="color:var(--accent)">One-Liner</span>
+        <code class="snippet-code" id="cmdInstantRun">curl -sSL http://127.0.0.1:8000/agent.py | python3 - 127.0.0.1</code>
+        <button class="btn xs" onclick="copySnippet($('cmdInstantRun').textContent)">Copy</button>
+      </div>
+      <div class="snippet-row">
+        <span class="snippet-label" style="color:var(--ok)">Install Daemon</span>
+        <code class="snippet-code" id="cmdServiceInstall">curl -sSL http://127.0.0.1:8000/install.sh | bash -s 127.0.0.1</code>
+        <button class="btn xs" onclick="copySnippet($('cmdServiceInstall').textContent)">Copy</button>
+      </div>
+      <div class="snippet-row">
+        <span class="snippet-label" style="color:var(--warn)">Aegis CLI</span>
+        <code class="snippet-code" id="cmdCliJoin">aegis join 127.0.0.1</code>
+        <button class="btn xs" onclick="copySnippet($('cmdCliJoin').textContent)">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cluster Nodes -->
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Cluster Mesh Nodes</div>
+        <div class="panel-subtitle" id="clusterVitals">–</div>
+      </div>
+      <button class="btn sm" id="refreshClusterBtn">Refresh</button>
+    </div>
+    <div class="tbl-wrap">
+      <table class="tbl" id="clusterNodesTbl">
+        <thead>
+          <tr>
+            <th>Node ID</th>
+            <th>Host</th>
+            <th>IP</th>
+            <th>Status</th>
+            <th>CPU / RAM</th>
+            <th>Last Seen</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Canary Rollouts -->
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Canary Rollouts</div>
+        <div class="panel-subtitle">Automated SLA verification and rollback</div>
+      </div>
+    </div>
+    <div class="tbl-wrap">
+      <table class="tbl" id="canaryTbl">
+        <thead>
+          <tr>
+            <th>Rollout ID</th>
+            <th>Service</th>
+            <th>State</th>
+            <th>Traffic</th>
+            <th>Error Rate</th>
+            <th>Latency</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     TAB 3: MODEL HUB
+═══════════════════════════════════════════════════════════ -->
+<section class="tab-content" id="tab-models">
+
+  <!-- Hardware Profile -->
+  <div class="panel info">
+    <div class="panel-header">
+      <div class="panel-title">Hardware Acceleration Profile</div>
+      <div class="panel-actions">
+        <div class="filter-bar" id="modelTaskFilterGroup">
+          <button class="filter-btn active" data-filter="ALL">All</button>
+          <button class="filter-btn" data-filter="CODING">Coding</button>
+          <button class="filter-btn" data-filter="REASONING">Reasoning</button>
+          <button class="filter-btn" data-filter="FAST_CHAT">Chat</button>
+          <button class="filter-btn" data-filter="EMBEDDING">Embed</button>
+        </div>
+        <button class="btn sm" id="optimizeVramBtn">Optimize VRAM</button>
+        <button class="btn sm" id="clusterCapacityBtn">Cluster Capacity</button>
+        <button class="btn sm primary" id="refreshModelsBtn">Refresh</button>
+      </div>
+    </div>
+    <div class="hw-profile" id="aiHardwareProfileBox"></div>
+  </div>
+
+  <!-- Best Models -->
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Recommended Models</div>
+        <div class="panel-subtitle">Full hardware fit — optimal tokens/sec</div>
+      </div>
+      <span class="badge ok">Compatible</span>
+    </div>
+    <div class="panel-body">
+      <div class="grid-auto" id="bestModelsList"></div>
+    </div>
+  </div>
+
+  <!-- Marginal + Incompatible -->
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Marginal — RAM Spill</div>
+        <span class="badge warn">Memory throttled</span>
+      </div>
+      <div class="panel-body">
+        <div style="display:flex;flex-direction:column;gap:8px" id="marginalModelsList"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Incompatible</div>
+        <span class="badge crit">OOM risk</span>
+      </div>
+      <div class="panel-body">
+        <div style="display:flex;flex-direction:column;gap:8px" id="worstModelsList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Deployments Table -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Active Deployments</div>
+    </div>
+    <div class="tbl-wrap">
+      <table class="tbl" id="deploymentsTbl">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Model</th>
+            <th>Runtime</th>
+            <th>Status</th>
+            <th>Port</th>
+            <th>Target</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Benchmarks Table -->
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Inference Benchmarks</div>
+        <div class="panel-subtitle">Time-to-first-token, decoding throughput, memory bandwidth</div>
+      </div>
+      <span class="badge info">Live + Simulation</span>
+    </div>
+    <div class="tbl-wrap">
+      <table class="tbl" id="benchmarksTbl">
+        <thead>
+          <tr>
+            <th>Benchmark ID</th>
+            <th>Model</th>
+            <th>Runtime</th>
+            <th>Throughput</th>
+            <th>TTFT</th>
+            <th>Prompt Eval</th>
+            <th>Status</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     TAB 4: DOCKER & K8S
+═══════════════════════════════════════════════════════════ -->
+<section class="tab-content" id="tab-workloads">
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Docker Containers</div>
+      <div class="panel-actions">
+        <input type="text" class="input" id="dockerSearch" placeholder="Filter..." style="width:140px">
+        <div class="filter-bar" id="dockerFilterGroup">
+          <button class="filter-btn active" data-filter="ALL">All</button>
+          <button class="filter-btn" data-filter="RUNNING">Running</button>
+          <button class="filter-btn" data-filter="CRASH">Crashed</button>
+        </div>
+        <button class="btn sm" id="refreshDockerBtn">Refresh</button>
+      </div>
+    </div>
+    <div class="tbl-wrap">
+      <table class="tbl" id="dockerTbl">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Image</th>
+            <th>Status</th>
+            <th>Health</th>
+            <th>Restarts</th>
+            <th>Memory</th>
+            <th>CPU</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-header"><div class="panel-title">Kubernetes Nodes</div></div>
+      <div class="tbl-wrap" id="k8sOverview"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><div class="panel-title">Kubernetes Pods</div></div>
+      <div class="tbl-wrap" id="k8sPods"></div>
+    </div>
+  </div>
+
+  <!-- Log Viewer -->
+  <div class="panel" id="logViewerPanel" style="display:none">
+    <div class="panel-header">
+      <div class="panel-title" id="logViewerTitle">Container Logs</div>
+      <div class="panel-actions">
+        <button class="btn sm" id="copyLogsBtn">Copy</button>
+        <button class="btn sm danger" id="closeLogsBtn">Close</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <pre class="log-box" id="logViewerContent" style="height:240px"></pre>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     TAB 5: INCIDENTS
+═══════════════════════════════════════════════════════════ -->
+<section class="tab-content" id="tab-incidents">
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Incident Registry</div>
+      <div class="panel-actions">
+        <div class="filter-bar" id="incFilterGroup">
+          <button class="filter-btn active" data-filter="ALL">All</button>
+          <button class="filter-btn" data-filter="ACTIVE">Active</button>
+          <button class="filter-btn" data-filter="CRIT">Critical</button>
+          <button class="filter-btn" data-filter="APPROVAL">Needs Approval</button>
+          <button class="filter-btn" data-filter="RESOLVED">Resolved</button>
+        </div>
+        <button class="btn sm" id="refreshIncidentsBtn">Refresh</button>
+      </div>
+    </div>
+    <div class="tbl-wrap">
+      <table class="tbl" id="incidentsTbl">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Severity</th>
+            <th>Category</th>
+            <th>Title</th>
+            <th>State</th>
+            <th>Created</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Incident Detail -->
+  <div class="panel" id="incidentDetailPanel" style="display:none">
+    <div class="panel-header">
+      <div class="panel-title" id="incDetailTitle">Incident Detail</div>
+      <div class="panel-actions">
+        <button class="btn sm" id="copyIncCliBtn">Copy CLI</button>
+        <button class="btn sm primary" id="runDiagBtn">Diagnose with AI</button>
+        <button class="btn sm" id="closeIncDetailBtn">Close</button>
+      </div>
+    </div>
+    <div class="panel-body" id="incDetailContent"></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     TAB 6: HARDWARE
+═══════════════════════════════════════════════════════════ -->
+<section class="tab-content" id="tab-hardware">
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-header"><div class="panel-title">Pressure Stall (PSI)</div></div>
+      <div class="panel-body" id="psiContainer"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><div class="panel-title">Storage Partitions</div></div>
       <div class="tbl-wrap">
-        <table class="tbl" id="clusterNodesTbl">
+        <table class="tbl" id="storageTbl">
           <thead>
-            <tr>
-              <th>Node ID</th>
-              <th>Hostname</th>
-              <th>IP Address</th>
-              <th>Status</th>
-              <th>CPU / RAM Usage</th>
-              <th>Last Heartbeat</th>
-              <th>Actions</th>
-            </tr>
+            <tr><th>Mount</th><th>Device</th><th>Capacity</th><th>Usage</th></tr>
           </thead>
           <tbody></tbody>
         </table>
       </div>
     </div>
+  </div>
 
-    <div class="panel">
-      <div class="panel-header">
-        <h2>Canary Deployments &amp; Closed-Loop Rollbacks</h2>
-        <span class="badge info">SLA Verification Engine</span>
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Predictive Forecasting</div>
+        <div class="panel-subtitle">OLS regression — time-to-exhaustion projection</div>
       </div>
-      <p style="font-size:0.78rem; color:var(--muted); margin: 0 0 10px 0;">
-        Aegis verifies canary rollouts across progressive steps. Breaching error budgets or latency SLAs automatically reverts traffic to the last-known-good version.
-      </p>
+      <span class="badge accent">Live</span>
+    </div>
+    <div class="panel-body" id="forecastContainer"></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-header"><div class="panel-title">System Inventory</div></div>
+      <div class="panel-body" id="inventoryContainer"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><div class="panel-title">Sensor Registry</div></div>
       <div class="tbl-wrap">
-        <table class="tbl" id="canaryTbl">
+        <table class="tbl" id="sensorTbl">
           <thead>
-            <tr>
-              <th>Rollout ID</th>
-              <th>Target Service</th>
-              <th>State</th>
-              <th>Traffic Step</th>
-              <th>Live Error Rate</th>
-              <th>Live Latency</th>
-              <th>Actions</th>
-            </tr>
+            <tr><th>Sensor</th><th>Kind</th><th>Value</th><th>State</th></tr>
           </thead>
           <tbody></tbody>
         </table>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <!-- TAB: AI MODELS & ONE-CLICK DEPLOYER (v3.1) -->
-  <section class="tab-content" id="tab-models">
-    <!-- Hardware AI Assessment Banner -->
-    <div class="panel" style="border-left: 3px solid var(--info); background: #0c121e;">
-      <div class="panel-header">
-        <h2>Physical AI Acceleration Profile</h2>
-        <div class="panel-actions">
-          <div class="filter-group" id="modelTaskFilterGroup">
-            <button class="filter-btn active" data-filter="ALL">ALL TASKS</button>
-            <button class="filter-btn" data-filter="CODING">CODING</button>
-            <button class="filter-btn" data-filter="REASONING">REASONING</button>
-            <button class="filter-btn" data-filter="FAST_CHAT">FAST CHAT</button>
-            <button class="filter-btn" data-filter="EMBEDDING">EMBEDDING</button>
-          </div>
-          <button class="btn sm" id="optimizeVramBtn" style="border-color:var(--primary); color:var(--primary);">⚡ Optimize VRAM</button>
-          <button class="btn sm" id="clusterCapacityBtn">🌐 Cluster AI Capacity</button>
-          <button class="btn sm primary" id="refreshModelsBtn">Refresh Catalog</button>
-        </div>
-      </div>
-      <div id="aiHardwareProfileBox" style="font-size:0.82rem; color:var(--text); line-height:1.6;"></div>
-    </div>
-
-    <!-- Best / Recommended Models Grid -->
+<!-- ═══════════════════════════════════════════════════════════
+     TAB 7: AI SERVING
+═══════════════════════════════════════════════════════════ -->
+<section class="tab-content" id="tab-ai">
+  <div class="grid-2">
     <div class="panel">
-      <div class="panel-header">
-        <h2>Optimal &amp; Recommended Models <span class="badge ok">100% GPU / Zero Swap</span></h2>
-        <span style="font-size:0.75rem; color:var(--muted);">Full layer offload, high tokens/sec, optimal KV headroom</span>
-      </div>
-      <div id="bestModelsList" class="cards" style="grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));"></div>
+      <div class="panel-header"><div class="panel-title">Ollama / vLLM</div></div>
+      <div class="panel-body" id="ollamaStatus"></div>
     </div>
-
-    <!-- Marginal & Worst Models Grid (2 columns) -->
-    <div class="grid-2">
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Marginal / Memory-Throttled Models <span class="badge warn">RAM Spilling</span></h2>
-        </div>
-        <p style="font-size:0.78rem; color:var(--muted); margin:0 0 10px 0;">Requires partial layer spilling into system RAM. Latency penalty of 4x to 10x.</p>
-        <div id="marginalModelsList" style="display:flex; flex-direction:column; gap:8px;"></div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Incompatible / Worst Fit Models <span class="badge crit">High OOM Crash Risk</span></h2>
-        </div>
-        <p style="font-size:0.78rem; color:var(--muted); margin:0 0 10px 0;">Exceeds combined hardware capacity. Severe risk of CUDA out-of-memory kills.</p>
-        <div id="worstModelsList" style="display:flex; flex-direction:column; gap:8px;"></div>
-      </div>
-    </div>
-
-    <!-- One-Click Active Deployments Table -->
     <div class="panel">
-      <div class="panel-header">
-        <h2>Active One-Click Model Deployments (Docker &amp; Kubernetes)</h2>
-      </div>
-      <div class="tbl-wrap">
-        <table class="tbl" id="deploymentsTbl">
-          <thead>
-            <tr>
-              <th>Deployment ID</th>
-              <th>Model</th>
-              <th>Runtime</th>
-              <th>Status</th>
-              <th>Port</th>
-              <th>Target / Container</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
+      <div class="panel-header"><div class="panel-title">Active Models in Memory</div></div>
+      <div class="panel-body" id="activeModels"></div>
     </div>
-
-    <!-- Empirical Model Inference Benchmarks Table (v3.1) -->
+  </div>
+  <div class="grid-2">
     <div class="panel">
-      <div class="panel-header">
-        <h2>Empirical Model Inference Benchmarks <span class="badge info">Live &amp; Physical Simulation</span></h2>
-        <span style="font-size:0.75rem; color:var(--muted);">Real Time-To-First-Token (TTFT), decoding throughput, and memory bandwidth validation</span>
-      </div>
-      <div class="tbl-wrap">
-        <table class="tbl" id="benchmarksTbl">
-          <thead>
-            <tr>
-              <th>Benchmark ID</th>
-              <th>Model</th>
-              <th>Runtime</th>
-              <th>Throughput</th>
-              <th>TTFT</th>
-              <th>Prompt Eval</th>
-              <th>Status</th>
-              <th>Created</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
+      <div class="panel-header"><div class="panel-title">Inference Processes</div></div>
+      <div class="panel-body" id="aiProcs"></div>
     </div>
-  </section>
-
-  <!-- TAB 3: DOCKER & K8S -->
-  <section class="tab-content" id="tab-workloads">
     <div class="panel">
-      <div class="panel-header">
-        <h2>Docker Containers</h2>
-        <div class="panel-actions">
-          <input type="text" id="dockerSearch" class="search-input" placeholder="Filter containers..." style="width:160px;">
-          <div class="filter-group" id="dockerFilterGroup">
-            <button class="filter-btn active" data-filter="ALL">ALL</button>
-            <button class="filter-btn" data-filter="RUNNING">RUNNING</button>
-            <button class="filter-btn" data-filter="CRASH">CRASH/STOPPED</button>
-          </div>
-          <button class="btn sm" id="refreshDockerBtn">Refresh</button>
-        </div>
-      </div>
-      <div class="tbl-wrap">
-        <table class="tbl" id="dockerTbl">
-          <thead>
-            <tr>
-              <th>Container Name</th>
-              <th>Image</th>
-              <th>Status</th>
-              <th>Health Probe</th>
-              <th>Restarts</th>
-              <th>Memory Usage</th>
-              <th>CPU Usage</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
+      <div class="panel-header"><div class="panel-title">Devin Status</div></div>
+      <div class="panel-body" id="devinStatusBox"></div>
     </div>
+  </div>
+</section>
 
-    <div class="grid-2">
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Kubernetes Nodes &amp; Deployments</h2>
-        </div>
-        <div id="k8sOverview" class="tbl-wrap"></div>
-      </div>
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Kubernetes Pods</h2>
-        </div>
-        <div id="k8sPods" class="tbl-wrap"></div>
-      </div>
-    </div>
-
-    <!-- Monospace Log Viewer Drawer -->
-    <div class="panel" id="logViewerPanel" style="display:none;">
-      <div class="panel-header">
-        <h2 id="logViewerTitle">Container Logs</h2>
-        <div class="panel-actions">
-          <button class="btn sm" id="copyLogsBtn">Copy Logs</button>
-          <button class="btn sm danger" id="closeLogsBtn">Close</button>
-        </div>
-      </div>
-      <pre class="log-box" id="logViewerContent"></pre>
-    </div>
-  </section>
-
-  <!-- TAB 4: INCIDENTS & DIAGNOSIS -->
-  <section class="tab-content" id="tab-incidents">
+<!-- ═══════════════════════════════════════════════════════════
+     TAB 8: DEVIN & PRs
+═══════════════════════════════════════════════════════════ -->
+<section class="tab-content" id="tab-engineering">
+  <div class="grid-2">
     <div class="panel">
-      <div class="panel-header">
-        <h2>Incident Registry &amp; Lifecycle Management</h2>
-        <div class="panel-actions">
-          <div class="filter-group" id="incFilterGroup">
-            <button class="filter-btn active" data-filter="ALL">ALL</button>
-            <button class="filter-btn" data-filter="ACTIVE">ACTIVE</button>
-            <button class="filter-btn" data-filter="CRIT">CRITICAL</button>
-            <button class="filter-btn" data-filter="APPROVAL">NEEDS APPROVAL</button>
-            <button class="filter-btn" data-filter="RESOLVED">RESOLVED</button>
-          </div>
-          <button class="btn sm" id="refreshIncidentsBtn">Refresh</button>
-        </div>
-      </div>
-      <div class="tbl-wrap">
-        <table class="tbl" id="incidentsTbl">
-          <thead>
-            <tr>
-              <th>Incident ID</th>
-              <th>Severity</th>
-              <th>Category</th>
-              <th>Title</th>
-              <th>State</th>
-              <th>Created</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
+      <div class="panel-header"><div class="panel-title">Devin Task Queue</div></div>
+      <div class="panel-body" id="devinTasksList"></div>
     </div>
-
-    <div class="panel" id="incidentDetailPanel" style="display:none;">
-      <div class="panel-header">
-        <h2 id="incDetailTitle">Incident Inspection</h2>
-        <div class="panel-actions">
-          <button class="btn sm" id="copyIncCliBtn">Copy CLI Command</button>
-          <button class="btn sm primary" id="runDiagBtn">Diagnose with AI</button>
-          <button class="btn sm danger" id="closeIncDetailBtn">Close</button>
-        </div>
-      </div>
-      <div id="incDetailContent"></div>
-    </div>
-  </section>
-
-  <!-- TAB 5: HARDWARE & PSI -->
-  <section class="tab-content" id="tab-hardware">
-    <div class="grid-2">
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Linux Kernel Pressure Stall Information (PSI)</h2>
-        </div>
-        <div id="psiContainer"></div>
-      </div>
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Storage Mounts &amp; Partitions</h2>
-        </div>
-        <div class="tbl-wrap">
-          <table class="tbl" id="storageTbl">
-            <thead>
-              <tr>
-                <th>Mount Point</th>
-                <th>Device</th>
-                <th>Capacity</th>
-                <th>Usage Bar</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
     <div class="panel">
-      <div class="panel-header">
-        <h2>Predictive Telemetry Forecasting &amp; Time-To-Exhaustion (TTE)</h2>
-        <span class="badge info">OLS Regression</span>
-      </div>
-      <p style="font-size:0.78rem; color:var(--muted); margin: 0 0 10px 0;">
-        Online ordinary least squares regression calculates consumption slopes to project capacity depletion before hardware saturation occurs.
-      </p>
-      <div id="forecastContainer"></div>
+      <div class="panel-header"><div class="panel-title">GitHub Pull Requests</div></div>
+      <div class="panel-body" id="githubStatusBox"></div>
     </div>
+  </div>
 
-    <div class="grid-2">
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Hardware &amp; System Inventory</h2>
-        </div>
-        <div id="inventoryContainer"></div>
-      </div>
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Sensor Registry</h2>
-        </div>
-        <div class="tbl-wrap">
-          <table class="tbl" id="sensorTbl">
-            <thead>
-              <tr>
-                <th>Sensor</th>
-                <th>Kind</th>
-                <th>Value</th>
-                <th>Validity</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Patch Sandbox Validator</div>
+        <div class="panel-subtitle">Isolated ephemeral clone — rejects .env and path traversal</div>
       </div>
     </div>
-  </section>
-
-  <!-- TAB 6: AI SERVING INFRASTRUCTURE -->
-  <section class="tab-content" id="tab-ai">
-    <div class="grid-2">
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Local Inference Serving (Ollama / vLLM)</h2>
-        </div>
-        <div id="ollamaStatus"></div>
+    <div class="panel-body">
+      <div class="flex gap-8 mt-8" style="margin-bottom:10px">
+        <input type="text" class="input" id="valTaskId" placeholder="Task ID" style="width:200px">
+        <button class="btn primary sm" id="runValidationBtn">Run Sandbox</button>
       </div>
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Active Models in VRAM / RAM</h2>
-        </div>
-        <div id="activeModels"></div>
-      </div>
+      <textarea class="log-box" id="valPatchText" style="height:120px;resize:vertical" placeholder="Paste unified git patch here..."></textarea>
+      <div id="valResultBox" class="mt-12"></div>
     </div>
+  </div>
+</section>
 
-    <div class="grid-2">
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Inference Processes &amp; Contention</h2>
-        </div>
-        <div id="aiProcs"></div>
-      </div>
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Devin Repair Engineer Status</h2>
-        </div>
-        <div id="devinStatusBox"></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- TAB 7: DEVIN & REPAIR PIPELINE -->
-  <section class="tab-content" id="tab-engineering">
-    <div class="grid-2">
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Devin Engineering Tasks Queue</h2>
-        </div>
-        <div id="devinTasksList"></div>
-      </div>
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Evidence-Backed GitHub Pull Requests</h2>
-        </div>
-        <div id="githubStatusBox"></div>
-      </div>
-    </div>
-
+<!-- ═══════════════════════════════════════════════════════════
+     TAB 9: POLICY & AUDIT
+═══════════════════════════════════════════════════════════ -->
+<section class="tab-content" id="tab-policy">
+  <div class="grid-2">
     <div class="panel">
+      <div class="panel-header"><div class="panel-title">Safety Policies</div></div>
+      <div class="panel-body" id="policyInfo"></div>
+    </div>
+
+    <div class="panel sim">
       <div class="panel-header">
-        <h2>Isolated Patch Validation Sandbox</h2>
+        <div class="panel-title">Fault Simulation</div>
+        <span class="badge purple">Non-destructive</span>
       </div>
-      <p style="font-size:0.78rem; color:var(--muted); margin: 0 0 10px 0;">
-        Executes test commands within an ephemeral cloned git workspace with stripped secrets. Rejects any patch modifying <code>.env</code> or containing path traversal.
-      </p>
-      <div style="display:flex; gap:10px; margin-bottom:10px;">
-        <input type="text" id="valTaskId" placeholder="Task ID (e.g. TASK-001)" class="search-input" style="width:260px;">
-        <button class="btn primary sm" id="runValidationBtn">Run Sandbox Validation</button>
-      </div>
-      <textarea id="valPatchText" class="log-box" style="width:100%; height:130px; resize:vertical;" placeholder="Paste unified git patch here..."></textarea>
-      <div id="valResultBox" style="margin-top:10px;"></div>
-    </div>
-  </section>
-
-  <!-- TAB 8: POLICY, AUDIT & SIMULATION -->
-  <section class="tab-content" id="tab-policy">
-    <div class="grid-2">
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Deterministic Action Safety Policies</h2>
-        </div>
-        <div id="policyInfo"></div>
-      </div>
-
-      <div class="panel" style="border-left: 3px solid var(--sim);">
-        <div class="panel-header">
-          <h2>Non-Destructive Fault Simulation <span class="badge sim">SIMULATED</span></h2>
-        </div>
-        <p style="font-size:0.78rem; color:var(--muted); margin: 0 0 10px 0;">
-          Inject synthetic telemetry to safely verify deterministic guardian state transitions without affecting physical hardware. Overrides are tagged <code>SIMULATED_OVERRIDE</code>.
-        </p>
-        <div style="display:flex; flex-wrap:wrap; gap:8px;" id="demoBtns"></div>
-        <div id="demoActive" style="font-size:0.78rem; color:var(--muted); margin-top:8px;"></div>
+      <div class="panel-body">
+        <p class="text-muted text-xs" style="margin-bottom:12px">Inject synthetic telemetry to test guardian state transitions without affecting hardware.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:6px" id="demoBtns"></div>
+        <div id="demoActive" class="text-xs text-muted mt-8"></div>
       </div>
     </div>
+  </div>
 
-    <div class="panel">
-      <div class="panel-header">
-        <h2>Cryptographic RBAC &amp; API Key Management</h2>
-        <button class="btn sm primary" id="createApiKeyBtn">Generate New Key</button>
-      </div>
-      <div class="tbl-wrap">
-        <table class="tbl" id="apiKeysTbl">
-          <thead>
-            <tr>
-              <th>Key Name</th>
-              <th>Role</th>
-              <th>Prefix</th>
-              <th>Created</th>
-              <th>Last Used</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">RBAC API Keys</div>
+      <button class="btn sm primary" id="createApiKeyBtn">Generate Key</button>
     </div>
+    <div class="tbl-wrap">
+      <table class="tbl" id="apiKeysTbl">
+        <thead>
+          <tr><th>Name</th><th>Role</th><th>Prefix</th><th>Created</th><th>Last Used</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
 
-    <div class="panel">
-      <div class="panel-header">
-        <h2>Immutable Audit Log &amp; Safety Trail</h2>
-      </div>
-      <div class="tbl-wrap">
-        <table class="tbl" id="auditTbl">
-          <thead>
-            <tr>
-              <th>Timestamp</th>
-              <th>Actor</th>
-              <th>Action</th>
-              <th>Subject</th>
-              <th>Outcome / Detail</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
+  <div class="panel">
+    <div class="panel-header"><div class="panel-title">Audit Log</div></div>
+    <div class="tbl-wrap">
+      <table class="tbl" id="auditTbl">
+        <thead>
+          <tr><th>Time</th><th>Actor</th><th>Action</th><th>Subject</th><th>Detail</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
     </div>
-  </section>
+  </div>
+</section>
 
 </main>
 
-<!-- Kubernetes Manifest Inspector Modal -->
-<div class="modal-overlay" id="manifestModal" style="display:none;">
-  <div class="modal-window" style="max-width:800px;">
+<!-- ═══════════════════════════════════════════════════════════
+     FOOTER
+═══════════════════════════════════════════════════════════ -->
+<footer>
+  <span>Aegis Control Plane v3.1.0</span>
+  <span class="footer-sep">·</span>
+  <a href="/documentation" target="_blank">Documentation</a>
+  <span class="footer-sep">·</span>
+  <a href="/metrics" target="_blank">Prometheus</a>
+  <span class="footer-sep">·</span>
+  <a href="/api/docs" target="_blank">OpenAPI</a>
+  <span class="footer-sep">·</span>
+  <a href="https://github.com/1kailas/Aegis" target="_blank">GitHub</a>
+</footer>
+
+<!-- ═══════════════════════════════════════════════════════════
+     MODALS
+═══════════════════════════════════════════════════════════ -->
+
+<!-- K8s Manifest Modal -->
+<div class="modal-backdrop" id="manifestModal">
+  <div class="modal wide">
     <div class="modal-header">
-      <h2 id="manifestModalTitle">Kubernetes Production Manifest</h2>
-      <button class="btn sm danger icon-only" id="closeManifestModalBtn">✕</button>
+      <h2 id="manifestModalTitle">Kubernetes Manifest</h2>
+      <button class="btn sm icon" id="closeManifestModalBtn" aria-label="Close">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
     </div>
     <div class="modal-body">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <span style="font-size:0.78rem; color:var(--muted);">Apply directly to your cluster via <code>kubectl apply -f -</code></span>
-        <button class="btn sm primary" id="copyManifestBtn">Copy Manifest YAML</button>
+      <div class="flex items-center justify-between" style="margin-bottom:10px">
+        <span class="text-xs text-muted">Apply with <code>kubectl apply -f -</code></span>
+        <button class="btn sm primary" id="copyManifestBtn">Copy YAML</button>
       </div>
-      <pre class="log-box" id="manifestModalContent" style="max-height:450px;"></pre>
+      <pre class="log-box" id="manifestModalContent" style="height:400px"></pre>
     </div>
   </div>
 </div>
 
-<!-- Cluster AI Capacity Planner Modal (v3.1) -->
-<div class="modal-overlay" id="clusterCapacityModal" style="display:none;">
-  <div class="modal-window" style="max-width:760px;">
+<!-- Cluster Capacity Modal -->
+<div class="modal-backdrop" id="clusterCapacityModal">
+  <div class="modal wide">
     <div class="modal-header">
-      <h2>🌐 Cluster AI Capacity &amp; Workload Placement</h2>
-      <button class="btn sm danger icon-only" id="closeClusterCapacityModalBtn">✕</button>
+      <h2>Cluster AI Capacity</h2>
+      <button class="btn sm icon" id="closeClusterCapacityModalBtn" aria-label="Close">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
     </div>
-    <div class="modal-body">
-      <div id="clusterCapacityContent" style="font-size:0.85rem; line-height:1.6;"></div>
-    </div>
+    <div class="modal-body" id="clusterCapacityContent"></div>
   </div>
 </div>
 
-<!-- CLI Cheat-sheet Modal -->
-<div class="modal-overlay" id="cliModal" style="display:none;">
-  <div class="modal-window">
+<!-- CLI Reference Modal -->
+<div class="modal-backdrop" id="cliModal">
+  <div class="modal">
     <div class="modal-header">
-      <h2>Aegis Developer CLI &amp; API Reference</h2>
-      <button class="btn sm danger icon-only" id="closeCliModalBtn">✕</button>
+      <h2>CLI Reference</h2>
+      <button class="btn sm icon" id="closeCliModalBtn" aria-label="Close">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
     </div>
     <div class="modal-body">
-      <div class="cli-cheatsheet">
+      <div class="cli-list">
         <div class="cli-item">
           <div>
             <div class="cli-cmd">aegis status</div>
-            <div class="cli-desc">Fast terminal dashboard of health, guardians, cluster and incidents</div>
+            <div class="cli-desc">Control plane health, guardians, cluster overview</div>
           </div>
-          <button class="btn sm" onclick="copySnippet('aegis status')">Copy</button>
+          <button class="btn xs" onclick="copySnippet('aegis status')">Copy</button>
         </div>
         <div class="cli-item">
           <div>
-            <div class="cli-cmd">aegis agent --server http://&lt;server-ip&gt;:8000</div>
-            <div class="cli-desc">Run worker node telemetry daemon reporting into cluster mesh</div>
+            <div class="cli-cmd">aegis agent --server http://&lt;ip&gt;:8000</div>
+            <div class="cli-desc">Start worker node telemetry daemon</div>
           </div>
-          <button class="btn sm" onclick="copySnippet('aegis agent --server http://127.0.0.1:8000')">Copy</button>
+          <button class="btn xs" onclick="copySnippet('aegis agent --server http://127.0.0.1:8000')">Copy</button>
         </div>
         <div class="cli-item">
           <div>
             <div class="cli-cmd">aegis nodes list</div>
-            <div class="cli-desc">List all registered cluster nodes, statuses, and capacities</div>
+            <div class="cli-desc">List registered cluster nodes</div>
           </div>
-          <button class="btn sm" onclick="copySnippet('aegis nodes list')">Copy</button>
+          <button class="btn xs" onclick="copySnippet('aegis nodes list')">Copy</button>
         </div>
         <div class="cli-item">
           <div>
             <div class="cli-cmd">aegis nodes drain &lt;node-id&gt;</div>
-            <div class="cli-desc">Cordon and drain a node before maintenance</div>
+            <div class="cli-desc">Cordon and drain a node</div>
           </div>
-          <button class="btn sm" onclick="copySnippet('aegis nodes drain &lt;node-id&gt;')">Copy</button>
+          <button class="btn xs" onclick="copySnippet('aegis nodes drain <node-id>')">Copy</button>
         </div>
         <div class="cli-item">
           <div>
             <div class="cli-cmd">aegis incidents list</div>
-            <div class="cli-desc">List all detected, contained, or repairing incidents</div>
+            <div class="cli-desc">List all incidents</div>
           </div>
-          <button class="btn sm" onclick="copySnippet('aegis incidents list')">Copy</button>
+          <button class="btn xs" onclick="copySnippet('aegis incidents list')">Copy</button>
         </div>
         <div class="cli-item">
           <div>
-            <div class="cli-cmd">aegis incidents diagnose &lt;incident-id&gt;</div>
-            <div class="cli-desc">Trigger multi-tier local and cloud AI root-cause diagnosis</div>
+            <div class="cli-cmd">aegis incidents diagnose &lt;id&gt;</div>
+            <div class="cli-desc">Trigger AI root-cause diagnosis</div>
           </div>
-          <button class="btn sm" onclick="copySnippet('aegis incidents diagnose &lt;incident-id&gt;')">Copy</button>
+          <button class="btn xs" onclick="copySnippet('aegis incidents diagnose <id>')">Copy</button>
+        </div>
+        <div class="cli-item">
+          <div>
+            <div class="cli-cmd">aegis models recommend</div>
+            <div class="cli-desc">Hardware-aware model fit scoring</div>
+          </div>
+          <button class="btn xs" onclick="copySnippet('aegis models recommend')">Copy</button>
+        </div>
+        <div class="cli-item">
+          <div>
+            <div class="cli-cmd">aegis models deploy &lt;model&gt; --runtime docker</div>
+            <div class="cli-desc">One-click model deployment</div>
+          </div>
+          <button class="btn xs" onclick="copySnippet('aegis models deploy qwen2.5-coder:7b --runtime docker')">Copy</button>
         </div>
         <div class="cli-item">
           <div>
             <div class="cli-cmd">aegis canary rollback &lt;rollout-id&gt;</div>
-            <div class="cli-desc">Immediately abort and revert an active canary deployment</div>
+            <div class="cli-desc">Emergency canary rollback</div>
           </div>
-          <button class="btn sm" onclick="copySnippet('aegis canary rollback &lt;rollout-id&gt;')">Copy</button>
+          <button class="btn xs" onclick="copySnippet('aegis canary rollback <rollout-id>')">Copy</button>
         </div>
         <div class="cli-item">
           <div>
-            <div class="cli-cmd">aegis keys create --name my-worker --role NODE_AGENT</div>
-            <div class="cli-desc">Generate cryptographically hashed RBAC token</div>
+            <div class="cli-cmd">aegis keys create --name worker --role NODE_AGENT</div>
+            <div class="cli-desc">Generate RBAC cryptographic token</div>
           </div>
-          <button class="btn sm" onclick="copySnippet('aegis keys create --name my-worker --role NODE_AGENT')">Copy</button>
+          <button class="btn xs" onclick="copySnippet('aegis keys create --name worker --role NODE_AGENT')">Copy</button>
         </div>
       </div>
     </div>
@@ -781,15 +800,7 @@
 </div>
 
 <!-- Toast Container -->
-<div class="toast-container" id="toastContainer"></div>
-
-<footer>
-  <span>Aegis SRE Control Plane</span>
-  <span class="spacer"></span>
-  <a href="/documentation" target="_blank">📖 Complete Documentation (A-Z)</a>
-  <a href="/metrics" target="_blank">Prometheus Scrape (/metrics)</a>
-  <a href="/api/docs" target="_blank">OpenAPI Docs (/api/docs)</a>
-</footer>
+<div class="toast-wrap" id="toastContainer"></div>
 
 <script src="/static/app.js"></script>
 </body>

@@ -32,13 +32,13 @@ function showToast(msg, kind = "info") {
   if (!c) return;
   const t = document.createElement("div");
   t.className = "toast";
-  const dotClass = kind === "ok" ? "dot-ok" : kind === "crit" ? "dot-crit" : "dot-warn";
-  t.innerHTML = `<span class="dot ${dotClass}"></span><span>${msg}</span>`;
+  const dotColor = kind === "ok" ? "var(--ok)" : kind === "crit" ? "var(--crit)" : "var(--warn)";
+  t.innerHTML = `<span class="status-dot" style="background:${dotColor};flex-shrink:0"></span><span>${msg}</span>`;
   c.appendChild(t);
   setTimeout(() => {
-    t.style.opacity = "0";
-    setTimeout(() => t.remove(), 200);
-  }, 2400);
+    t.classList.add("fade");
+    setTimeout(() => t.remove(), 220);
+  }, 2800);
 }
 
 window.copySnippet = function(text) {
@@ -120,18 +120,18 @@ async function measurePing() {
     const res = await fetch("/api/health");
     const t1 = performance.now();
     const lat = Math.round(t1 - t0);
-    const meter = $("pingVal");
+    const val = $("pingVal");
     const dot = $("pingDot");
     if (res.ok) {
-      meter.textContent = `${lat}ms`;
-      dot.className = lat > 150 ? "dot dot-warn" : "dot dot-ok";
+      val.textContent = `${lat}ms`;
+      dot.className = lat > 150 ? "ping-dot warn" : "ping-dot";
     } else {
-      meter.textContent = `HTTP ${res.status}`;
-      dot.className = "dot dot-crit";
+      val.textContent = `${res.status}`;
+      dot.className = "ping-dot crit";
     }
   } catch {
     $("pingVal").textContent = "offline";
-    $("pingDot").className = "dot dot-crit";
+    $("pingDot").className = "ping-dot crit";
   }
 }
 
@@ -176,15 +176,15 @@ async function pollOverview() {
 function renderHealth(snap) {
   const modeTgl = $("modeToggle");
   modeTgl.checked = snap.mode === "policy_autonomous";
-  $("modeLabel").textContent = snap.mode;
+  $("modeLabel").textContent = snap.mode === "policy_autonomous" ? "autonomous" : "monitoring";
 
   const estop = $("estopBtn");
   if (snap.emergency_stop) {
     estop.classList.add("active");
-    estop.innerHTML = "<span>E-STOP ACTIVE</span>";
+    estop.textContent = "E-STOP ON";
   } else {
     estop.classList.remove("active");
-    estop.innerHTML = "<span>E-STOP</span>";
+    estop.textContent = "E-STOP";
   }
 
   // Active Incidents Banner
@@ -192,14 +192,11 @@ function renderHealth(snap) {
   const b = $("incidentBanner");
   const incTab = $("incTabBadge");
   if (incs.length > 0) {
-    b.style.display = "block";
-    b.innerHTML = `<strong>Attention:</strong> ${incs.length} active infrastructure incident(s) undergoing triage or repair. <button class="btn sm" onclick="switchTab('incidents')" style="margin-left:12px;">Open Incident Registry</button>`;
-    if (incTab) {
-      incTab.style.display = "inline-flex";
-      incTab.textContent = incs.length;
-    }
+    b.classList.add("visible");
+    $("incidentBannerText").textContent = `${incs.length} active incident${incs.length > 1 ? "s" : ""} require attention`;
+    if (incTab) { incTab.style.display = "inline-flex"; incTab.textContent = incs.length; }
   } else {
-    b.style.display = "none";
+    b.classList.remove("visible");
     if (incTab) incTab.style.display = "none";
   }
 }
@@ -212,8 +209,8 @@ function renderCards(snap) {
   // CPU
   const cpuPct = l.cpu_percent !== undefined ? l.cpu_percent : 0;
   $("cpuVal").textContent = `${cpuPct.toFixed(1)}%`;
-  $("cpuVal").className = `big ${cpuPct > 85 ? "crit" : cpuPct > 70 ? "warn" : "ok"}`;
-  $("cpuSub").textContent = `${host.cpu_cores || 1} Cores · Load 1m: ${l.load_avg_1 ?? "–"}`;
+  $("cpuVal").className = `metric-val ${cpuPct > 85 ? "crit" : cpuPct > 70 ? "warn" : "ok"}`;
+  $("cpuSub").textContent = `${host.cpu_cores || 1} cores · load ${l.load_avg_1 ?? "–"}`;
 
   cpuSparkHistory.push(cpuPct);
   if (cpuSparkHistory.length > 25) cpuSparkHistory.shift();
@@ -222,8 +219,8 @@ function renderCards(snap) {
   // Memory
   const memPct = mem.percent !== undefined ? mem.percent : 0;
   $("memVal").textContent = `${memPct.toFixed(1)}%`;
-  $("memVal").className = `big ${memPct > 90 ? "crit" : memPct > 75 ? "warn" : "ok"}`;
-  $("memSub").textContent = `${mem.used_mb ?? "–"} MB used / ${mem.total_mb ?? "–"} MB`;
+  $("memVal").className = `metric-val ${memPct > 90 ? "crit" : memPct > 75 ? "warn" : "ok"}`;
+  $("memSub").textContent = `${mem.used_mb ?? "–"} / ${mem.total_mb ?? "–"} MB`;
 
   memSparkHistory.push(memPct);
   if (memSparkHistory.length > 25) memSparkHistory.shift();
@@ -233,15 +230,15 @@ function renderCards(snap) {
   const disks = l.disks || [];
   const maxDisk = disks.reduce((acc, d) => Math.max(acc, d.used_pct || 0), 0);
   $("diskVal").textContent = disks.length ? `${maxDisk.toFixed(0)}%` : "–";
-  $("diskVal").className = `big ${maxDisk > 90 ? "crit" : maxDisk > 75 ? "warn" : "ok"}`;
-  $("diskSub").textContent = `${disks.length} filesystem partition(s) active`;
+  $("diskVal").className = `metric-val ${maxDisk > 90 ? "crit" : maxDisk > 75 ? "warn" : "ok"}`;
+  $("diskSub").textContent = `${disks.length} partition${disks.length !== 1 ? "s" : ""}`;
 
   // Network
   const io = l.io_rates || {};
   const rxKb = io.recv_bytes_s ? (io.recv_bytes_s / 1024).toFixed(0) : 0;
   const txKb = io.sent_bytes_s ? (io.sent_bytes_s / 1024).toFixed(0) : 0;
   $("netVal").textContent = `${rxKb} KB/s`;
-  $("netSub").textContent = `TX: ${txKb} KB/s · RX: ${rxKb} KB/s`;
+  $("netSub").textContent = `TX ${txKb} · RX ${rxKb} KB/s`;
 
   // GPU
   const gpu = snap.gpu || {};
@@ -249,27 +246,22 @@ function renderCards(snap) {
   if (devs.length > 0) {
     const g0 = devs[0];
     $("gpuVal").textContent = `${g0.utilization_pct || 0}%`;
-    $("gpuVal").className = "big ok";
+    $("gpuVal").className = "metric-val ok";
     $("gpuSub").textContent = `${devs.length}x ${g0.model || "GPU"} · ${g0.temperature_c || 0}°C`;
   } else {
-    $("gpuVal").textContent = "Nominal";
-    $("gpuVal").className = "big ok";
-    $("gpuSub").textContent = "No discrete GPU attached";
+    $("gpuVal").textContent = "–";
+    $("gpuVal").className = "metric-val muted";
+    $("gpuSub").textContent = "No GPU detected";
   }
 }
 
 function renderThermal(snap) {
   const t = snap.thermal || {};
   const st = t.state || "NOMINAL";
-  $("thermalState").textContent = `${t.highest_c ? t.highest_c.toFixed(1) + "°C" : "–"}`;
-  $("thermalState").className = `big ${st === "CRITICAL" ? "crit" : st === "WARNING" ? "warn" : "ok"}`;
-
-  const b = $("thermalStateBadge");
-  b.textContent = st;
-  b.className = `badge ${st === "CRITICAL" ? "crit" : st === "WARNING" ? "warn" : "ok"}`;
-
+  $("thermalVal").textContent = `${t.highest_c ? t.highest_c.toFixed(1) + "°C" : "–"}`;
+  $("thermalVal").className = `metric-val ${st === "CRITICAL" ? "crit" : st === "WARNING" ? "warn" : "ok"}`;
   const r = t.rate_of_rise_c_per_s !== undefined ? `${t.rate_of_rise_c_per_s >= 0 ? "+" : ""}${t.rate_of_rise_c_per_s.toFixed(2)}°C/s` : "0.0°C/s";
-  $("thermalSub").textContent = `Rate of rise: ${r} · Sensor: ${t.highest_sensor || "auto"}`;
+  $("thermalSub").textContent = `${st} · ${r}`;
 }
 
 function renderQuickSummaries(snap) {
@@ -363,11 +355,7 @@ async function refreshCluster() {
     const summary = await (await fetch("/api/cluster/summary")).json();
     const vitals = $("clusterVitals");
     if (vitals) {
-      vitals.innerHTML = `
-        <div><strong>Total Nodes:</strong> ${summary.total_nodes} (Online: <span style="color:var(--ok); font-weight:600;">${summary.online_nodes}</span>, Drained: ${summary.drained_nodes})</div>
-        <div><strong>Cluster Capacity:</strong> ${summary.total_cluster_cpu_cores} CPU cores · ${summary.total_cluster_ram_gb} GB RAM · ${summary.total_cluster_gpus} GPUs</div>
-        <div><strong>Average CPU:</strong> ${summary.average_cpu_percent}%</div>
-      `;
+      vitals.textContent = `${summary.online_nodes}/${summary.total_nodes} online · ${summary.total_cluster_cpu_cores} cores · ${summary.total_cluster_ram_gb} GB RAM`;
     }
 
     const tabBadge = $("clusterTabBadge");
@@ -387,28 +375,28 @@ async function refreshCluster() {
         const cpu = n.cpu_percent || 0;
         const ram = n.ram_percent || 0;
         return `
-          <tr>
-            <td><code>${n.node_id}</code></td>
-            <td><strong>${n.hostname}</strong></td>
-            <td>${n.ip_address || "–"}</td>
-            <td><span class="badge ${badgeClass}">${n.status}</span></td>
-            <td>
-              <div class="progress-container">
-                <span style="font-size:0.7rem; color:var(--muted); width:28px;">CPU</span>
-                <div class="progress-bar"><div class="progress-fill ${cpu > 80 ? 'crit' : 'ok'}" style="width:${cpu}%"></div></div>
-                <span class="progress-val">${cpu.toFixed(0)}%</span>
-              </div>
-              <div class="progress-container" style="margin-top:2px;">
-                <span style="font-size:0.7rem; color:var(--muted); width:28px;">RAM</span>
-                <div class="progress-bar"><div class="progress-fill ${ram > 85 ? 'crit' : 'ok'}" style="width:${ram}%"></div></div>
-                <span class="progress-val">${ram.toFixed(0)}%</span>
-              </div>
-            </td>
-            <td>${fmtRelative(n.last_heartbeat_at)}</td>
-            <td>
-              ${isOnline ? `<button class="btn sm danger" onclick="drainNode('${n.node_id}')">Drain</button>` : `<span style="font-size:0.75rem; color:var(--muted);">Drained</span>`}
-            </td>
-          </tr>
+        <tr>
+              <td><code class="mono">${n.node_id}</code></td>
+              <td><strong>${n.hostname}</strong></td>
+              <td class="mono dim">${n.ip_address || "–"}</td>
+              <td><span class="badge ${badgeClass}">${n.status}</span></td>
+              <td>
+                <div class="progress-wrap">
+                  <span class="text-xs text-muted" style="width:28px">CPU</span>
+                  <div class="progress-bar"><div class="progress-fill ${cpu > 80 ? 'crit' : 'ok'}" style="width:${cpu}%"></div></div>
+                  <span class="progress-pct">${cpu.toFixed(0)}%</span>
+                </div>
+                <div class="progress-wrap mt-8" style="margin-top:4px">
+                  <span class="text-xs text-muted" style="width:28px">RAM</span>
+                  <div class="progress-bar"><div class="progress-fill ${ram > 85 ? 'crit' : 'ok'}" style="width:${ram}%"></div></div>
+                  <span class="progress-pct">${ram.toFixed(0)}%</span>
+                </div>
+              </td>
+              <td class="dim">${fmtRelative(n.last_heartbeat_at)}</td>
+              <td>
+                ${isOnline ? `<button class="btn xs danger" onclick="drainNode('${n.node_id}')">Drain</button>` : `<span class="text-xs text-muted">Drained</span>`}
+              </td>
+            </tr>
         `;
       }).join("");
     }
@@ -515,10 +503,28 @@ async function refreshModels() {
     const prof = res.hardware_profile || {};
 
     // 1. Hardware profile banner
-    const gpus = (prof.gpu_names || []).join(", ") || "No discrete GPU detected (CPU mode)";
+    const gpus = (prof.gpu_names || []).join(", ") || "No discrete GPU (CPU mode)";
     $("aiHardwareProfileBox").innerHTML = `
-      <div><strong>Acceleration:</strong> ${prof.has_gpu ? `<span class="badge ok">GPU ACCELERATED</span>` : `<span class="badge warn">CPU INFERENCE</span>`} · ${gpus}</div>
-      <div style="margin-top:2px;"><strong>VRAM Capacity:</strong> <span style="font-family:var(--font-mono); color:var(--text-bright);">${prof.total_vram_gb} GB</span> | <strong>System RAM:</strong> ${prof.total_ram_gb} GB | <strong>CPU:</strong> ${prof.cpu_cores} cores</div>
+      <div class="hw-field">
+        <div class="hw-field-label">Acceleration</div>
+        <div class="hw-field-val">${prof.has_gpu ? `<span class="badge ok">GPU</span>` : `<span class="badge warn">CPU</span>`}</div>
+      </div>
+      <div class="hw-field">
+        <div class="hw-field-label">VRAM</div>
+        <div class="hw-field-val">${prof.total_vram_gb} GB</div>
+      </div>
+      <div class="hw-field">
+        <div class="hw-field-label">System RAM</div>
+        <div class="hw-field-val">${prof.total_ram_gb} GB</div>
+      </div>
+      <div class="hw-field">
+        <div class="hw-field-label">CPU Cores</div>
+        <div class="hw-field-val">${prof.cpu_cores}</div>
+      </div>
+      <div class="hw-field">
+        <div class="hw-field-label">GPU</div>
+        <div class="hw-field-val" style="font-size:0.75rem;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${gpus}</div>
+      </div>
     `;
 
     // 2. Best Models List
@@ -526,71 +532,63 @@ async function refreshModels() {
     $("bestModelsList").innerHTML = best.length ? best.map(m => {
       const s = m.model;
       return `
-        <div class="card" style="border-top:3px solid var(--ok);">
-          <div class="card-header">
-            <h3>${s.display_name}</h3>
-            <span class="badge ok">${m.fit_tier} (${m.fit_score}/100)</span>
+        <div class="model-card ok">
+          <div class="flex items-center justify-between">
+            <div class="model-name">${s.display_name}</div>
+            <span class="badge ok">${m.fit_score}/100</span>
           </div>
-          <div style="font-size:0.75rem; color:var(--muted); margin:4px 0;">
-            Task: <span class="badge info">${s.task}</span> · Params: ${s.parameters_b}B · Quant: <code>${s.quantization}</code>
+          <div class="model-meta">
+            <span class="badge ghost">${s.task}</span>
+            <span>${s.parameters_b}B params</span>
+            <span><code>${s.quantization}</code></span>
+            <span>~${m.estimated_tokens_per_sec} t/s</span>
           </div>
-          <div style="font-size:0.8rem; margin:6px 0; color:var(--text-bright);">
-            ⚡ Est. Throughput: <strong>~${m.estimated_tokens_per_sec} tokens/s</strong> (VRAM: ${s.vram_required_gb} GB)
+          <div class="text-xs text-muted">
+            ${(m.reasons || []).map(r => `<div>${r}</div>`).join("")}
           </div>
-          <div style="font-size:0.75rem; color:var(--dim); line-height:1.4; margin-bottom:10px;">
-            ${(m.reasons || []).map(r => `<div>✔ ${r}</div>`).join("")}
-          </div>
-          <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:auto;">
-            <button class="btn sm primary" onclick="deployModel('${s.name}', 'docker')">1-Click Docker</button>
-            <button class="btn sm" onclick="deployModel('${s.name}', 'k8s')">1-Click K8s</button>
-            <button class="btn sm" onclick="runBenchmark('${s.name}')">⚡ Benchmark</button>
-            <button class="btn sm" onclick="viewK8sManifest('${s.name}')">View K8s YAML</button>
+          <div class="model-actions">
+            <button class="btn xs primary" onclick="deployModel('${s.name}', 'docker')">Docker</button>
+            <button class="btn xs" onclick="deployModel('${s.name}', 'k8s')">K8s</button>
+            <button class="btn xs" onclick="runBenchmark('${s.name}')">Benchmark</button>
+            <button class="btn xs" onclick="viewK8sManifest('${s.name}')">View YAML</button>
           </div>
         </div>
       `;
-    }).join("") : `<div style="color:var(--muted); padding:12px;">No optimal models found for this hardware.</div>`;
+    }).join("") : `<div class="text-muted text-sm" style="padding:12px">No optimal models for this hardware.</div>`;
 
     // 3. Marginal Models
     const marginal = res.marginal_models || [];
     $("marginalModelsList").innerHTML = marginal.length ? marginal.map(m => {
       const s = m.model;
       return `
-        <div style="background:var(--card); border:1px solid var(--line); border-left:3px solid var(--warn); border-radius:5px; padding:10px 14px;">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <strong>${s.display_name}</strong>
-            <span class="badge warn">${m.fit_tier}</span>
+        <div class="model-card warn" style="flex-direction:row;align-items:center;justify-content:space-between;gap:10px">
+          <div>
+            <div class="model-name">${s.display_name}</div>
+            <div class="text-xs text-muted">${s.vram_required_gb} GB · ~${m.offload_layers_percent}% on GPU</div>
+            <div class="text-xs" style="color:var(--warn)">${(m.warnings || []).join(" ")}</div>
           </div>
-          <div style="font-size:0.75rem; color:var(--muted); margin:4px 0;">
-            Requires ${s.vram_required_gb} GB VRAM · ~${m.offload_layers_percent}% on GPU / Spills to RAM
-          </div>
-          <div style="font-size:0.75rem; color:var(--warn); margin:4px 0;">
-            ${(m.warnings || []).join(" ")}
-          </div>
-          <div style="display:flex; gap:6px; margin-top:6px;">
-            <button class="btn sm" onclick="deployModel('${s.name}', 'docker')">Deploy Docker</button>
-            <button class="btn sm" onclick="deployModel('${s.name}', 'k8s')">Deploy K8s</button>
-            <button class="btn sm" onclick="runBenchmark('${s.name}')">⚡ Benchmark</button>
+          <div class="flex gap-8" style="gap:5px;flex-shrink:0">
+            <button class="btn xs" onclick="deployModel('${s.name}', 'docker')">Docker</button>
+            <button class="btn xs" onclick="deployModel('${s.name}', 'k8s')">K8s</button>
           </div>
         </div>
       `;
-    }).join("") : `<div style="color:var(--muted); font-size:0.8rem; padding:8px;">None</div>`;
+    }).join("") : `<div class="text-xs text-muted" style="padding:8px">None</div>`;
 
     // 4. Worst Models
     const worst = res.worst_models || [];
     $("worstModelsList").innerHTML = worst.length ? worst.map(m => {
       const s = m.model;
       return `
-        <div style="background:var(--card); border:1px solid var(--line); border-left:3px solid var(--crit); border-radius:5px; padding:10px 14px;">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <strong>${s.display_name}</strong>
-            <span class="badge crit">${m.fit_tier}</span>
+        <div class="model-card crit" style="flex-direction:row;align-items:center;justify-content:space-between;gap:10px">
+          <div>
+            <div class="model-name">${s.display_name}</div>
+            <div class="text-xs" style="color:var(--crit)">${(m.warnings || []).join(" ")}</div>
           </div>
-          <div style="font-size:0.75rem; color:var(--crit); margin-top:4px;">
-            ${(m.warnings || []).join(" ")}
-          </div>
+          <span class="badge crit">${m.fit_tier}</span>
         </div>
       `;
-    }).join("") : `<div style="color:var(--muted); font-size:0.8rem; padding:8px;">None</div>`;
+    }).join("") : `<div class="text-xs text-muted" style="padding:8px">None</div>`;
 
     // 5. Active Deployments
     const deps = await (await fetch("/api/models/deployments")).json();
@@ -741,7 +739,6 @@ window.openClusterCapacityModal = async function() {
     showToast(`Error fetching cluster capacity: ${e}`, "crit");
   }
 };
-
 window.deployModel = async function(modelName, runtime = "docker") {
   showToast(`Deploying ${modelName} to ${runtime}...`, "info");
   try {
@@ -762,7 +759,7 @@ window.viewK8sManifest = async function(modelName) {
     const res = await (await fetch(`/api/orchestration/manifests/k8s?model_name=${modelName}`)).json();
     $("manifestModalTitle").textContent = `Kubernetes Manifest: ${modelName}`;
     $("manifestModalContent").textContent = res.manifest_yaml;
-    $("manifestModal").style.display = "flex";
+    $(manifestModal").style.display = "flex";
   } catch (e) {
     showToast(`Error generating manifest: ${e}`, "crit");
   }
@@ -779,7 +776,7 @@ window.stopDeployment = async function(depId) {
   }
 };
 
-$("closeManifestModalBtn")?.addEventListener("click", () => { $("manifestModal").style.display = "none"; });
+$(closeManifestModalBtn")?.addEventListener("click", () => { $("manifestModal").style.display = "none"; });
 $("copyManifestBtn")?.addEventListener("click", () => { copySnippet($("manifestModalContent").textContent); });
 $("refreshModelsBtn")?.addEventListener("click", refreshModels);
 $("optimizeVramBtn")?.addEventListener("click", optimizeVram);
@@ -1227,6 +1224,14 @@ function initSSE() {
       const ev = JSON.parse(e.data);
       appendEvent(ev);
     } catch {}
+  };
+  sse.onerror = () => {
+    const dot = $("sseStatusDot");
+    if (dot) { dot.className = "status-dot crit"; }
+  };
+  sse.onopen = () => {
+    const dot = $("sseStatusDot");
+    if (dot) { dot.className = "status-dot ok"; }
   };
 }
 
