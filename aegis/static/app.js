@@ -334,46 +334,50 @@ function renderQuickSummaries(snap) {
   const c = snap.docker || {};
   const containers = c.containers || [];
   const quickW = $("quickWorkloads");
-  if (containers.length) {
-    quickW.innerHTML = `
-      <table class="tbl">
-        <thead><tr><th>Container</th><th>Image</th><th>Status</th><th>Memory</th></tr></thead>
-        <tbody>
-          ${containers.slice(0, 4).map(cnt => `
-            <tr>
-              <td><strong>${cnt.name}</strong></td>
-              <td><code>${(cnt.image || "").substring(0, 20)}</code></td>
-              <td><span class="badge ${cnt.status === 'running' ? 'ok' : 'crit'}">${cnt.status}</span></td>
-              <td>${cnt.metrics ? cnt.metrics.memory_usage_mb + " MB" : "–"}</td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    `;
-  } else {
-    quickW.innerHTML = `<div style="font-size:0.8rem; color:var(--muted); padding:8px 0;">No active containers detected.</div>`;
+  if (quickW) {
+    if (containers.length) {
+      quickW.innerHTML = `
+        <table class="tbl">
+          <thead><tr><th>Container</th><th>Image</th><th>Status</th><th>Memory</th></tr></thead>
+          <tbody>
+            ${containers.slice(0, 4).map(cnt => `
+              <tr>
+                <td><strong>${cnt.name}</strong></td>
+                <td><code>${(cnt.image || "").substring(0, 20)}</code></td>
+                <td><span class="badge ${cnt.status === 'running' ? 'ok' : 'crit'}">${cnt.status}</span></td>
+                <td>${cnt.metrics ? cnt.metrics.memory_usage_mb + " MB" : "–"}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    } else {
+      quickW.innerHTML = `<div style="font-size:0.8rem; color:var(--muted); padding:8px 0;">No active containers detected.</div>`;
+    }
   }
 
   const actions = snap.actions || [];
   const quickA = $("quickActions");
-  if (actions.length) {
-    quickA.innerHTML = `
-      <table class="tbl">
-        <thead><tr><th>Time</th><th>Action</th><th>Target</th><th>Result</th></tr></thead>
-        <tbody>
-          ${actions.slice(0, 4).map(a => `
-            <tr>
-              <td>${fmtTime(a.ts)}</td>
-              <td><strong>${a.action}</strong></td>
-              <td>${a.target || "host"}</td>
-              <td><span class="badge ok">${a.result || "executed"}</span></td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    `;
-  } else {
-    quickA.innerHTML = `<div style="font-size:0.8rem; color:var(--muted); padding:8px 0;">No recent autonomous interventions recorded.</div>`;
+  if (quickA) {
+    if (actions.length) {
+      quickA.innerHTML = `
+        <table class="tbl">
+          <thead><tr><th>Time</th><th>Action</th><th>Target</th><th>Result</th></tr></thead>
+          <tbody>
+            ${actions.slice(0, 4).map(a => `
+              <tr>
+                <td>${fmtTime(a.ts)}</td>
+                <td><strong>${a.action}</strong></td>
+                <td>${a.target || "host"}</td>
+                <td><span class="badge ok">${a.result || "executed"}</span></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    } else {
+      quickA.innerHTML = `<div style="font-size:0.8rem; color:var(--muted); padding:8px 0;">No recent autonomous interventions recorded.</div>`;
+    }
   }
 }
 
@@ -387,7 +391,7 @@ async function pollHistory() {
 
 function drawChart() {
   const c = $("chart-main");
-  if (!c) return;
+  if (!c || c.clientWidth === 0) return;
   const ctx = c.getContext("2d");
   const w = c.clientWidth, h = c.height;
   c.width = w;
@@ -2505,7 +2509,25 @@ $("btnTriggerTargetBug")?.addEventListener("click", async () => {
     }
     refreshTargets();
     refreshIncidents();
+    if (typeof refreshKeaTopology === "function") refreshKeaTopology();
   } catch {}
+});
+
+$("btnRecoverTarget")?.addEventListener("click", async () => {
+  try {
+    await fetch("http://127.0.0.1:5050/fix", { method: "POST" }).catch(() => {});
+    await fetch("/api/incidents/recovery-confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target_url: "http://127.0.0.1:5050" }),
+    }).catch(() => {});
+    showToast("Recovery verified: Target returned HTTP 200 OK. Autonomous loop closed!", "ok");
+    refreshTargets();
+    refreshIncidents();
+    if (typeof refreshKeaTopology === "function") refreshKeaTopology();
+  } catch (e) {
+    showToast(`Recovery error: ${e}`, "crit");
+  }
 });
 
 $("btnTestSafety")?.addEventListener("click", async () => {

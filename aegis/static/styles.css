@@ -1052,6 +1052,47 @@ footer a:hover { color: var(--text-primary); }
   color: #f1f5f9;
 }
 
+/* SRE Minimal Workbench & Action Bar */
+.sre-hero-bar {
+  background: linear-gradient(135deg, rgba(16, 22, 34, 0.75) 0%, rgba(10, 14, 22, 0.95) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  flex-wrap: wrap;
+}
+
+.sre-hero-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sre-hero-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f8fafc;
+  letter-spacing: -0.2px;
+}
+
+.sre-hero-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.sre-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .walkthrough-panel {
   background: linear-gradient(135deg, rgba(20, 27, 45, 0.7) 0%, rgba(12, 16, 26, 0.95) 100%);
   border: 1px solid rgba(255, 255, 255, 0.09);

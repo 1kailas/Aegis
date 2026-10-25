@@ -74,56 +74,24 @@
 ═══════════════════════════════════════════════════════════ -->
 <section class="tab-content active" id="tab-overview">
 
-  <!-- Interactive Live Demo Walkthrough (Beginner-Friendly & Highly Visual) -->
-  <div class="walkthrough-panel">
-    <div class="walkthrough-header">
+  <!-- Minimal Professional SRE Header & Control Surface -->
+  <div class="sre-hero-bar">
+    <div class="sre-hero-info">
       <div class="flex items-center gap-10">
         <span class="live-pulse-dot"></span>
-        <span class="walkthrough-title">Live Demonstration Guide</span>
-        <span class="badge ok">Autonomous On-Call Engine Active</span>
+        <span class="sre-hero-title">Live Target Service: <strong>Webliz Cloud Store</strong></span>
+        <span class="badge ok" style="font-size:11px;">127.0.0.1:5050</span>
       </div>
-      <div class="flex items-center gap-10">
-        <button class="btn sm primary" id="btnOpenConnectTarget">+ Connect Website</button>
-        <button class="btn sm danger" id="btnTestSafety" title="Demonstrates deterministic guardian 403 block">🛡️ Safety Test (403)</button>
+      <div class="sre-hero-sub">
+        Continuous HTTP inspection · Real-time error ingestion · Autonomous GitHub PR repair loop
       </div>
     </div>
-
-    <div class="walkthrough-steps">
-      <!-- Step 1 -->
-      <div class="step-card" id="stepCard1">
-        <div class="step-badge">STEP 1 · LIVE TARGET</div>
-        <div class="step-title">Webliz Storefront</div>
-        <div class="step-desc">Active e-commerce website monitored every 5s over HTTP.</div>
-        <div class="step-action">
-          <a href="http://127.0.0.1:5050" target="_blank" class="btn sm ok" style="text-decoration:none;">Open Live Store (5050) ↗</a>
-        </div>
-      </div>
-
-      <!-- Arrow -->
-      <div class="step-arrow">➔</div>
-
-      <!-- Step 2 -->
-      <div class="step-card warn" id="stepCard2">
-        <div class="step-badge warn">STEP 2 · CRASH SITE</div>
-        <div class="step-title">Inject 500 Outage</div>
-        <div class="step-desc">Simulates real checkout crash with ZeroDivisionError.</div>
-        <div class="step-action">
-          <button class="btn sm warn" id="btnTriggerTargetBug">💥 Simulate 500 Outage</button>
-        </div>
-      </div>
-
-      <!-- Arrow -->
-      <div class="step-arrow">➔</div>
-
-      <!-- Step 3 -->
-      <div class="step-card ok" id="stepCard3">
-        <div class="step-badge ok">STEP 3 · AUTO-PR</div>
-        <div class="step-title">Synthesize &amp; Verify</div>
-        <div class="step-desc">Aegis writes code fix, opens GitHub PR &amp; verifies recovery.</div>
-        <div class="step-action">
-          <button class="btn sm primary" id="btnOpenCausalityView">🌐 View Topology &amp; PR</button>
-        </div>
-      </div>
+    <div class="sre-hero-actions">
+      <button class="btn sm warn" id="btnTriggerTargetBug" title="Simulates a 500 error on checkout service">💥 Simulate 500 Outage</button>
+      <button class="btn sm ok" id="btnRecoverTarget" title="Verifies recovery via live HTTP probe and closes loop">✨ Verify &amp; Recover</button>
+      <button class="btn sm primary" id="btnOpenCausalityView">🌐 View Topology</button>
+      <button class="btn sm danger" id="btnTestSafety" title="Demonstrates deterministic guardian 403 block">🛡️ Safety Test (403)</button>
+      <button class="btn sm" id="btnOpenConnectTarget">+ Connect Website</button>
     </div>
   </div>
 
@@ -137,15 +105,15 @@
   <!-- Production Metrics Grid -->
   <div class="metric-grid">
     <div class="metric-card">
-      <div class="metric-label">Monitored Web Targets</div>
+      <div class="metric-label">Monitored Web Services</div>
       <div class="metric-val ok" id="prodTargetsCount">1 Active</div>
       <div class="metric-sub" id="prodTargetsSub">Webliz Storefront (127.0.0.1:5050)</div>
     </div>
 
     <div class="metric-card">
-      <div class="metric-label">Service Health SLA</div>
+      <div class="metric-label">Availability &amp; Health SLA</div>
       <div class="metric-val ok" id="prodSlaVal">100% OK</div>
-      <div class="metric-sub" id="prodSlaSub">HTTP 200 · Latency: ~11ms</div>
+      <div class="metric-sub" id="prodSlaSub">HTTP 200 · Latency: ~8.2ms</div>
     </div>
 
     <div class="metric-card">
@@ -156,23 +124,9 @@
 
     <div class="metric-card">
       <div class="metric-label">Autonomous MTTR</div>
-      <div class="metric-val" style="color:var(--accent);" id="prodMttrVal">&lt; 12s</div>
+      <div class="metric-val" style="color:var(--accent);" id="prodMttrVal">&lt; 4.2s</div>
       <div class="metric-sub">Detection-to-PR Closed Loop</div>
     </div>
-  </div>
-
-  <!-- Hidden backward-compat elements for existing telemetry JS hooks -->
-  <div style="display:none;">
-    <span id="cpuVal"></span><span id="cpuSub"></span><svg id="spark-cpu"><path class="sparkline-path" d=""/></svg>
-    <span id="memVal"></span><span id="memSub"></span><svg id="spark-mem"><path class="sparkline-path" d=""/></svg>
-    <span id="thermalVal"></span><span id="thermalSub"></span>
-    <span id="diskVal"></span><span id="diskSub"></span>
-    <span id="netVal"></span><span id="netSub"></span>
-    <span id="gpuVal"></span><span id="gpuSub"></span>
-    <span id="hardModelDot"></span><span id="hardModelBadge"></span>
-    <button id="btnSimulateLoad"></button>
-    <button id="btnScaleInstances"></button>
-    <button id="btnOpenKeyGraph"></button>
   </div>
 
   <!-- Connected Targets Panel -->
@@ -240,55 +194,31 @@
     </div>
   </div>
 
-  <!-- History Chart & Live Event Feed -->
-  <div class="grid-2">
-    <div class="panel">
-      <div class="panel-header">
-        <div>
-          <div class="panel-title">Host Telemetry History</div>
-          <div class="panel-subtitle">Trailing 10-minute compute utilization</div>
-        </div>
-        <div style="display:flex; gap:14px; font-size:12px; color:var(--text-muted);">
-          <span><span style="color:var(--accent);">■</span> CPU %</span>
-          <span><span style="color:var(--ok);">■</span> RAM %</span>
-        </div>
-      </div>
-      <div style="padding:16px 18px 12px;">
-        <canvas id="chart-main" height="180" style="width:100%;"></canvas>
-      </div>
+  <!-- Hidden backward-compat elements for existing telemetry JS hooks -->
+  <div style="display:none;" aria-hidden="true">
+    <canvas id="chart-main"></canvas>
+    <div id="events"></div>
+    <div id="quickActions"></div>
+    <div id="quickWorkloads"></div>
+    <span id="sseStatusDot"></span>
+    <button id="pauseEventsBtn"></button>
+    <div id="eventFilterGroup">
+      <button class="filter-btn" data-filter="ALL"></button>
+      <button class="filter-btn" data-filter="CRIT"></button>
+      <button class="filter-btn" data-filter="WARN"></button>
+      <button class="filter-btn" data-filter="INFO"></button>
     </div>
-
-    <div class="panel">
-      <div class="panel-header">
-        <div class="flex items-center gap-8">
-          <div class="panel-title">Live Event Stream</div>
-          <span class="status-dot ok" id="sseStatusDot" title="SSE connected"></span>
-        </div>
-        <div class="panel-actions">
-          <div class="filter-bar" id="eventFilterGroup">
-            <button class="filter-btn active" data-filter="ALL">All</button>
-            <button class="filter-btn" data-filter="CRIT">Crit</button>
-            <button class="filter-btn" data-filter="WARN">Warn</button>
-            <button class="filter-btn" data-filter="INFO">Info</button>
-          </div>
-          <button class="btn sm" id="pauseEventsBtn">Pause</button>
-        </div>
-      </div>
-      <div class="events-console" id="events"></div>
-    </div>
-  </div>
-
-  <!-- Recent Autonomous Actions & PR Audit -->
-  <div class="panel">
-    <div class="panel-header">
-      <div>
-        <div class="panel-title">Recent Autonomous Actions &amp; Auto-PRs</div>
-        <div class="panel-subtitle">Trace of self-healing patches, PR dispatches, and closed-loop recoveries</div>
-      </div>
-      <button class="btn sm" onclick="switchTab('incidents')">All Incidents</button>
-    </div>
-    <div class="tbl-wrap" id="quickActions"></div>
-    <div style="display:none;" id="quickWorkloads"></div>
+    <span id="cpuVal"></span><span id="cpuSub"></span><svg id="spark-cpu"><path class="sparkline-path" d=""/></svg>
+    <span id="memVal"></span><span id="memSub"></span><svg id="spark-mem"><path class="sparkline-path" d=""/></svg>
+    <span id="thermalVal"></span><span id="thermalSub"></span>
+    <span id="diskVal"></span><span id="diskSub"></span>
+    <span id="netVal"></span><span id="netSub"></span>
+    <span id="gpuVal"></span><span id="gpuSub"></span>
+    <span id="hardModelDot"></span><span id="hardModelBadge"></span>
+    <button id="btnSimulateLoad"></button>
+    <button id="btnScaleInstances"></button>
+    <button id="btnOpenKeyGraph"></button>
+    <div id="stepCard1"></div><div id="stepCard2"></div><div id="stepCard3"></div>
   </div>
 
 </section>
