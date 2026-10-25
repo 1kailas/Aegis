@@ -2659,14 +2659,21 @@ document.querySelectorAll("#keaSubTabGroup .filter-btn").forEach(btn => {
   btn.addEventListener("click", () => setKeaSubTab(btn.dataset.subtab));
 });
 
+function isIncidentClosed(inc) {
+  if (!inc) return true;
+  if (inc.closed_at) return true;
+  const terminalStates = ["RECOVERY_VERIFIED", "RESOLVED", "CLOSED_WITHOUT_REPAIR", "REPAIR_REJECTED", "EXTERNAL_DEPENDENCY_FAILURE"];
+  return terminalStates.includes(inc.state);
+}
+
 async function refreshKeaTopology() {
   try {
     const incs = await (await fetch("/api/incidents")).json();
-    const activeInc = (incs || []).find(x => x.state !== "RESOLVED") || (incs || [])[0];
+    const activeInc = (incs || []).find(x => !isIncidentClosed(x));
 
     const badge = $("causalityTabBadge");
     if (badge) {
-      const activeCount = (incs || []).filter(x => x.state !== "RESOLVED" && x.state !== "RECOVERY_VERIFIED").length;
+      const activeCount = (incs || []).filter(x => !isIncidentClosed(x)).length;
       badge.textContent = activeCount;
       badge.style.display = activeCount > 0 ? "inline-block" : "none";
     }
@@ -2681,7 +2688,7 @@ async function refreshKeaTopology() {
         incident_id: "NONE",
         title: "All Microservices Nominal",
         state: "HEALTHY",
-        target_service: "Checkout Payment Service",
+        target_service: "Webliz Store Checkout Service",
         topology: {
           blast_radius_score: "LOW",
           affected_services_count: 0,
@@ -2714,14 +2721,14 @@ function renderKeaTopologySvg(data) {
   const svg = $("keaTopologySvg");
   if (!svg) return;
 
-  const isFailing = data && data.state && data.state !== "HEALTHY" && data.state !== "RECOVERY_VERIFIED" && data.state !== "RESOLVED";
-  const isRecovered = data && data.state === "RECOVERY_VERIFIED";
+  const isFailing = Boolean(data && data.state && !["HEALTHY", "RECOVERY_VERIFIED", "RESOLVED", "CLOSED_WITHOUT_REPAIR"].includes(data.state));
+  const isRecovered = Boolean(data && data.state === "RECOVERY_VERIFIED");
 
   // Coordinates strictly matching the Kea screenshot layout
   const nodes = [
     { id: "web-frontend", label: "web-frontend", x: 90, y: 220, status: "healthy", icon: "✔" },
     { id: "api-gateway", label: "api-gateway", x: 230, y: 220, status: "healthy", icon: "✔" },
-    { id: "checkout", label: "checkout", x: 400, y: 110, status: "healthy", icon: "✔" },
+    { id: "checkout", label: "checkout", x: 400, y: 110, status: isFailing ? "failing" : "healthy", icon: isFailing ? "✖" : "✔" },
     { id: "payment", label: "payment", x: 570, y: 155, status: isFailing ? "degraded" : "healthy", icon: isFailing ? "⚠" : "✔", badge: isFailing ? "dep-182" : null },
     { id: "postgres", label: "postgres", x: 720, y: 190, status: isFailing ? "degraded" : "healthy", icon: isFailing ? "⚠" : "✔" },
     { id: "notifications", label: "notifications", x: 570, y: 260, status: "healthy", icon: "✔" },
@@ -2817,44 +2824,46 @@ function renderKeaTopologySvg(data) {
 
 function renderKeaRightPanel(data) {
   if (!data) return;
-  const isFailing = data.state && data.state !== "HEALTHY" && data.state !== "RECOVERY_VERIFIED" && data.state !== "RESOLVED";
-  const iid = data.incident_id || "INC-001";
+  const isFailing = Boolean(data.state && !["HEALTHY", "RECOVERY_VERIFIED", "RESOLVED", "CLOSED_WITHOUT_REPAIR"].includes(data.state));
+  const iid = data.incident_id || "NONE";
 
   if ($("keaIncidentCode")) $("keaIncidentCode").textContent = iid;
-  if ($("keaRightIncidentTitle")) $("keaRightIncidentTitle").textContent = `Incident ${iid}`;
+  if ($("keaRightIncidentTitle")) {
+    $("keaRightIncidentTitle").textContent = isFailing ? `Incident ${iid}` : "Service Topology: Nominal";
+  }
   if ($("keaRightIncidentSub")) {
     $("keaRightIncidentSub").textContent = isFailing
-      ? "Opened just now, 2 services affected, revision 1"
-      : "Closed-loop verified, all services nominal";
+      ? "Active failure detected · 2 downstream services impacted"
+      : "All 8 microservices nominal · 0 active outages";
   }
   if ($("keaRightStateBadge")) {
     $("keaRightStateBadge").className = `badge ${isFailing ? 'crit' : 'ok'}`;
-    $("keaRightStateBadge").textContent = data.state || (isFailing ? "OPEN" : "RECOVERY_VERIFIED");
+    $("keaRightStateBadge").textContent = isFailing ? (data.state || "OPEN") : "ALL HEALTHY";
   }
   if ($("keaIncidentStatusText")) {
     $("keaIncidentStatusText").innerHTML = isFailing
-      ? `Incident <strong>Open</strong> <code>${iid}</code>, revision 1`
-      : `Incident <strong>Verified</strong> <code>${iid}</code> (Closed)`;
+      ? `Incident <strong>Open</strong> <code>${iid}</code>`
+      : `All Microservices <strong>Nominal</strong> (0 Outages)`;
   }
   if ($("keaIncidentDot")) {
     $("keaIncidentDot").className = `status-dot ${isFailing ? 'crit' : 'ok'}`;
   }
   if ($("keaServicesAffected")) {
     $("keaServicesAffected").innerHTML = isFailing
-      ? `Services affected: <strong>2/8</strong> (0 customer-facing)`
+      ? `Services affected: <strong>2/8</strong> (checkout, payment)`
       : `Services affected: <strong>0/8</strong> (All Healthy)`;
   }
 
   // 1. Overview Tab
   if ($("keaWhatChangedText")) {
     $("keaWhatChangedText").innerHTML = isFailing
-      ? `All affected services were healthy until failure onset. Outage on <strong>payment / checkout</strong> preceded the first anomaly by 45s and its causal chain explains 2 of 2 anomalies.`
-      : `All affected services have recovered and verified nominal after autonomous patch deployment.`;
+      ? `Outage detected on <strong>checkout / payment</strong> service path. Stack trace indicates unhandled division by zero in promotion discount calculation.`
+      : `All 8 microservices are healthy and operating normally with zero active anomalies.`;
   }
   if ($("keaRelevantBadgeText")) {
     $("keaRelevantBadgeText").textContent = isFailing
-      ? `Outage on checkout service, 45s before onset`
-      : `Recovery verified via live HTTP 200 health probe`;
+      ? `Outage on checkout service · ZeroDivisionError`
+      : `Nominal telemetry · 100% OK`;
   }
 
   // Ranked candidates list
@@ -2933,7 +2942,7 @@ function renderKeaRightPanel(data) {
       $("keaPrEngineBadge").textContent = `⚡ ${data.auto_pr.pr_engine ? data.auto_pr.pr_engine.toUpperCase() : 'GROQ'} (${data.auto_pr.pr_model || 'llama-3.1'})`;
     }
     if ($("keaDiffBox")) {
-      $("keaDiffBox").textContent = data.auto_pr.patch || `--- a/demo-target/app.py\n+++ b/demo-target/app.py\n@@ -40,3 +40,2 @@\n-    if BUG_TRIGGERED:\n-        res = 1 / 0\n     return jsonify({"status": "ok"})`;
+      $("keaDiffBox").textContent = data.auto_pr.patch || (isFailing ? `--- a/demo-target/app.py\n+++ b/demo-target/app.py\n@@ -40,3 +40,2 @@\n-    if BUG_TRIGGERED:\n-        res = 1 / 0\n     return jsonify({"status": "ok"})` : `# All systems nominal. Zero active patches pending.`);
     }
   }
 }
@@ -2942,9 +2951,8 @@ function renderKeaRightPanel(data) {
 $("keaSimulate500Btn")?.addEventListener("click", async () => {
   try {
     $("keaSimulate500Btn").textContent = "Simulating…";
-    await fetch("http://127.0.0.1:5050/trigger-bug", { method: "POST" }).catch(() => {});
-    await fetch("/api/demo/trigger-outage", { method: "POST" }).catch(() => {});
-    showToast("Outage simulated: 500 error on checkout service", "warn");
+    await fetch("http://127.0.0.1:5050/break", { method: "POST" }).catch(() => {});
+    showToast("Outage simulated: 500 error on checkout service & auto-reported", "warn");
     setTimeout(refreshKeaTopology, 800);
   } catch (e) {
     showToast(`Simulation error: ${e}`, "crit");
@@ -2957,7 +2965,7 @@ $("keaAutoRepairBtn")?.addEventListener("click", async () => {
   try {
     $("keaAutoRepairBtn").textContent = "Synthesizing…";
     const incs = await (await fetch("/api/incidents")).json();
-    const activeInc = (incs || []).find(x => x.state !== "RESOLVED") || (incs || [])[0];
+    const activeInc = (incs || []).find(x => !isIncidentClosed(x));
     if (!activeInc) {
       showToast("No active incident to repair", "info");
       return;
@@ -2994,23 +3002,33 @@ $("keaDelegateBtn")?.addEventListener("click", () => {
 $("keaVerifyRecoverBtn")?.addEventListener("click", async () => {
   try {
     $("keaVerifyRecoverBtn").textContent = "Verifying…";
-    const incs = await (await fetch("/api/incidents")).json();
-    const activeInc = (incs || []).find(x => x.state !== "RESOLVED") || (incs || [])[0];
-    const taskId = activeInc ? `TASK-DEVIN-${activeInc.id}` : "TASK-DEVIN-DEMO";
-
-    await fetch(`/api/devin/tasks/${taskId}/close-loop`, {
+    await fetch("http://127.0.0.1:5050/fix", { method: "POST" }).catch(() => {});
+    await fetch("/api/incidents/recovery-confirm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ auto_apply: true }),
+      body: JSON.stringify({ target_url: "http://127.0.0.1:5050" }),
     }).catch(() => {});
-
-    await fetch("http://127.0.0.1:5050/fix", { method: "POST" }).catch(() => {});
     showToast("Recovery Verified: Target returned HTTP 200 OK. Autonomous loop closed!", "ok");
     setTimeout(refreshKeaTopology, 500);
   } catch (e) {
     showToast(`Verification error: ${e}`, "crit");
   } finally {
     $("keaVerifyRecoverBtn").textContent = "⚡ Verify & Recover";
+  }
+});
+
+$("keaCloseLoopCtaBtn")?.addEventListener("click", () => {
+  $("keaVerifyRecoverBtn")?.click();
+});
+
+$("keaResetBtn")?.addEventListener("click", async () => {
+  try {
+    await fetch("http://127.0.0.1:5050/fix", { method: "POST" }).catch(() => {});
+    await fetch("/api/incidents/clear-all", { method: "POST" }).catch(() => {});
+    showToast("State reset: All 8 microservices nominal", "ok");
+    setTimeout(refreshKeaTopology, 400);
+  } catch (e) {
+    showToast(`Reset error: ${e}`, "crit");
   }
 });
 

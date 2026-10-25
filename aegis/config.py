@@ -49,8 +49,8 @@ class ModelsConfig(BaseModel):
     gemini_max_requests_per_hour: int = 30
     gemini_max_input_chars: int = 20000
     gemini_timeout_s: float = 60.0
-    groq_model: str = "llama-3.1-8b-instant"
-    groq_fallback_model: str = "qwen/qwen3.8-27b"
+    groq_model: str = "qwen/qwen3.8-27b"
+    groq_fallback_model: str = "llama-3.1-8b-instant"
     groq_max_requests_per_hour: int = 15
     groq_timeout_s: float = 30.0
 

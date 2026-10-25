@@ -67,7 +67,7 @@ def report_error_to_aegis(error_msg: str, tb_str: str) -> dict[str, Any]:
         ],
     }
     try:
-        with httpx.Client(timeout=10.0) as client:
+        with httpx.Client(timeout=25.0) as client:
             resp = client.post(f"{AEGIS_CONTROL_PLANE}/api/incidents/report", json=payload)
             if resp.status_code == 200:
                 data = resp.json()
@@ -405,20 +405,66 @@ STOREFRONT_HTML = """
     }
 
     async function triggerOutage() {
-      const res = await fetch('/break', { method: 'POST' });
-      const data = await res.json();
-      alert("Outage Bug Injected! /health and checkout will now throw ZeroDivisionError and auto-report to Aegis.");
-      updateHealthBadge(false);
-      submitCheckout();
+      const btn = document.getElementById('btnBreak');
+      const origText = btn ? btn.textContent : "";
+      if (btn) { btn.textContent = "Injecting Bug & Synthesizing PR..."; btn.disabled = true; }
+
+      document.getElementById('errorBanner').style.display = 'none';
+      document.getElementById('successBanner').style.display = 'none';
+
+      try {
+        const res = await fetch('/break', { method: 'POST' });
+        const data = await res.json();
+        updateHealthBadge(false);
+
+        // Display error banner with PR details immediately
+        document.getElementById('errorBanner').style.display = 'block';
+        document.getElementById('errorTitle').textContent = `🚨 HTTP 500: ZeroDivisionError Caught`;
+        document.getElementById('errorMessage').textContent = data.error || 'ZeroDivisionError: division by zero in calculate_discounted_total (demo-target/app.py:48)';
+
+        const prUrl = data.aegis_dispatch && data.aegis_dispatch.pull_request_url;
+        if (prUrl) {
+          document.getElementById('prInfoBox').innerHTML = `
+            ⚡ <strong>Autonomous PR Engine Engaged!</strong> Pull Request created:<br>
+            <a href="${prUrl}" target="_blank" style="color:#38bdf8; font-weight:700; text-decoration:underline; font-size:13px; display:inline-block; margin-top:4px;">
+              ${prUrl} ↗
+            </a>
+          `;
+        } else if (data.aegis_dispatch && data.aegis_dispatch.dispatch && data.aegis_dispatch.dispatch.status === "API_DISABLED") {
+          document.getElementById('prInfoBox').innerHTML = `
+            ⚠️ Reported to Aegis. AI API dispatch is currently paused (Operator Switch: OFF).
+          `;
+        } else {
+          document.getElementById('prInfoBox').innerHTML = `
+            ⚡ Reported to Aegis AI Control Plane. Synthesizing PR fix...
+          `;
+        }
+      } catch (err) {
+        document.getElementById('errorBanner').style.display = 'block';
+        document.getElementById('errorMessage').textContent = String(err);
+      } finally {
+        if (btn) { btn.textContent = origText; btn.disabled = false; }
+        // Also trigger checkout to show end-user checkout error
+        submitCheckout();
+      }
     }
 
     async function resolveOutage() {
-      const res = await fetch('/fix', { method: 'POST' });
-      const data = await res.json();
-      alert("Bug Resolved! ZeroDivisionError fixed. /health returns HTTP 200 OK.");
-      document.getElementById('errorBanner').style.display = 'none';
-      updateHealthBadge(true);
-      submitCheckout();
+      const btn = document.getElementById('btnFix');
+      if (btn) { btn.textContent = "Recovering..."; btn.disabled = true; }
+      try {
+        const res = await fetch('/fix', { method: 'POST' });
+        const data = await res.json();
+        updateHealthBadge(true);
+        document.getElementById('errorBanner').style.display = 'none';
+        document.getElementById('successBanner').style.display = 'block';
+        document.getElementById('successMsg').textContent = "Fix deployed and verified. /health returned HTTP 200 OK. Autonomous healing closed!";
+        submitCheckout();
+      } catch (err) {
+        console.warn(err);
+      } finally {
+        if (btn) { btn.textContent = "✨ Apply Fix / Recover"; btn.disabled = false; }
+      }
     }
 
     function updateHealthBadge(isOk) {
@@ -512,13 +558,32 @@ def checkout():
 
 
 @app.route("/break", methods=["POST"])
+@app.route("/trigger-bug", methods=["POST"])
 def trigger_bug():
     _STATE["broken"] = True
     _LOG.warning("Defect injected: calculate_discounted_total will raise ZeroDivisionError")
+
+    # Immediately execute calculation with 100% discount to produce real ZeroDivisionError exception
+    err_msg = "ZeroDivisionError: division by zero in calculate_discounted_total (demo-target/app.py:48)"
+    tb_str = ""
+    try:
+        calculate_discounted_total(149.00, 100.0)
+    except Exception as exc:
+        tb_str = traceback.format_exc()
+        err_msg = f"{type(exc).__name__}: {exc}"
+        _LOG.error("Caught injected exception:\n%s", tb_str)
+        _STATE["last_error"] = err_msg
+
+    # Send error report to Aegis AI Control Plane
+    aegis_res = report_error_to_aegis(err_msg, tb_str or err_msg)
+
     return (
         jsonify({
             "status": "bug_triggered",
             "broken": True,
+            "error": err_msg,
+            "traceback": tb_str,
+            "aegis_dispatch": aegis_res,
             "message": "Planted defect triggered: checkout and /health now fail with ZeroDivisionError.",
         }),
         200,
@@ -526,10 +591,22 @@ def trigger_bug():
 
 
 @app.route("/fix", methods=["POST"])
+@app.route("/resolve-bug", methods=["POST"])
 def resolve_bug():
     _STATE["broken"] = False
     _STATE["last_error"] = None
     _LOG.info("Defect resolved: /health returns HTTP 200 OK.")
+
+    # Notify Aegis Control Plane of verified recovery
+    try:
+        with httpx.Client(timeout=5.0) as client:
+            client.post(
+                f"{AEGIS_CONTROL_PLANE}/api/incidents/recovery-confirm",
+                json={"target_url": "http://127.0.0.1:5050", "status": "RECOVERY_VERIFIED"},
+            )
+    except Exception:
+        pass
+
     return (
         jsonify({
             "status": "bug_resolved",

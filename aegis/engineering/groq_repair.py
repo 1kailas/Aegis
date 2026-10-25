@@ -32,8 +32,8 @@ class GroqRepairEngine:
     def __init__(
         self,
         api_key: str | None = None,
-        model: str = "llama-3.1-8b-instant",
-        fallback_model: str = "qwen/qwen3.8-27b",
+        model: str = "qwen/qwen3.8-27b",
+        fallback_model: str = "llama-3.1-8b-instant",
         max_requests_per_hour: int = 15,
         timeout_s: float = 30.0,
     ):

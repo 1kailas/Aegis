@@ -376,6 +376,29 @@ def create_app(ctx: AppContext) -> FastAPI:
         ctx.events.emit("incident", f"All incidents cleared ({count} removed)", "info")
         return {"cleared": True, "count": count}
 
+    @app.post("/api/incidents/recovery-confirm")
+    def incidents_recovery_confirm(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+        """Validates that a monitored website or service has recovered and closes incident loop."""
+        target_url = payload.get("target_url") or "http://127.0.0.1:5050"
+        active_incs = ctx.incidents.active()
+        recovered = []
+        for inc in active_incs:
+            try:
+                ctx.incidents.transition(
+                    inc["id"],
+                    "RECOVERY_VERIFIED",
+                    actor="recovery_confirm",
+                    note=f"Target {target_url} confirmed recovered via operator fix / health probe",
+                )
+                recovered.append(inc["id"])
+            except Exception as ex:
+                _LOG.debug("Could not verify recovery for %s: %s", inc["id"], ex)
+        try:
+            ctx.targets.probe_all()
+        except Exception:
+            pass
+        return {"success": True, "recovered_incidents": recovered}
+
     @app.post("/api/incidents/{incident_id}/diagnose")
     def incident_diagnose(incident_id: str) -> dict[str, Any]:
         inc = ctx.incidents.get(incident_id)

@@ -175,9 +175,9 @@ class WebsiteMonitor:
                 )
             else:
                 self.incidents.append_evidence(active["id"], evidence_item)
-        elif is_healthy and target.get("consecutive_failures", 0) > 0:
+        elif is_healthy:
             active = self.incidents.active_by_category(category)
-            if active and active.get("state") in ("DETECTED", "INVESTIGATING", "CONTAINED", "PR_OPENED"):
+            if active and active.get("state") not in ("RECOVERY_VERIFIED", "CLOSED_WITHOUT_REPAIR"):
                 self.incidents.append_evidence(
                     active["id"],
                     {
@@ -186,10 +186,26 @@ class WebsiteMonitor:
                         "probe_url": probe_url,
                         "status_code": status_code,
                         "latency_ms": round(duration_ms, 2),
-                        "note": "Target health probe returned 200 OK",
+                        "note": f"Target health probe returned {status_code} OK",
                         "ts": now,
                     },
                 )
+                try:
+                    self.incidents.transition(
+                        active["id"],
+                        "RECOVERY_VERIFIED",
+                        actor="website_monitor",
+                        note=f"Target {target['name']} probe confirmed healthy (HTTP {status_code}) — recovery verified autonomously",
+                    )
+                    self.events.emit(
+                        "target_recovered",
+                        f"Target '{target['name']}' returned HTTP {status_code} — incident {active['id']} recovery verified",
+                        "info",
+                        incident_id=active["id"],
+                        target_id=target_id,
+                    )
+                except Exception as ex:
+                    _LOG.debug("Could not auto-transition target incident: %s", ex)
 
         return {
             "target_id": target_id,
