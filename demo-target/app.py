@@ -43,7 +43,7 @@ def calculate_discounted_total(base_amount: float, discount_percent: float) -> f
     """Calculates final order total applying promotional discount."""
     if _STATE["broken"]:
         # Planted defect: ZeroDivisionError occurs when discount_percent is 100!
-        multiplier = 100 / (100 - discount_percent)
+        multiplier = 100 / (100 - discount_percent) if discount_percent < 100.0 else 0.0
         return round(base_amount * multiplier, 2)
     # Correct calculation:
     discount_fraction = max(0.0, min(100.0, discount_percent)) / 100.0
