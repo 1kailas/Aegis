@@ -4,15 +4,15 @@
    Zero cartoon emojis, perfect typographic proportions, strict functional color palette. */
 
 :root {
-  --bg: #090b10;
-  --bg-card: #0f131c;
-  --bg-card-hover: #141926;
-  --bg-subtle: #171d2c;
-  --bg-input: #121622;
+  --bg: #07090e;
+  --bg-card: #0d111a;
+  --bg-card-hover: #121724;
+  --bg-subtle: #151b29;
+  --bg-input: #0a0d15;
 
   --border: rgba(255, 255, 255, 0.08);
-  --border-subtle: rgba(255, 255, 255, 0.05);
-  --border-hover: rgba(255, 255, 255, 0.15);
+  --border-subtle: rgba(255, 255, 255, 0.04);
+  --border-hover: rgba(255, 255, 255, 0.16);
   --border-focus: #38bdf8;
 
   --text-primary: #f8fafc;
@@ -43,10 +43,10 @@
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 
-  --topbar-height: 54px;
-  --radius-sm: 5px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  --topbar-height: 52px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
   --radius-pill: 9999px;
 
   /* Typography scale */
@@ -82,7 +82,11 @@
 
 body {
   font-family: var(--font-sans);
-  background: var(--bg);
+  background-color: var(--bg);
+  background-image: 
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(56, 189, 248, 0.05), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 85% 90%, rgba(99, 102, 241, 0.03), transparent 60%);
+  background-attachment: fixed;
   color: var(--text-secondary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -424,32 +428,68 @@ strong {
 .btn:active { transform: scale(0.98); }
 
 .btn.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #07090e;
+  background: linear-gradient(180deg, #0284c7 0%, #0369a1 100%);
+  border-color: #38bdf8;
+  color: #fff;
   font-weight: 600;
+  box-shadow: 0 1px 6px rgba(56, 189, 248, 0.25);
 }
 .btn.primary:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-  color: #07090e;
+  background: linear-gradient(180deg, #38bdf8 0%, #0284c7 100%);
+  border-color: #7dd3fc;
+  color: #fff;
+}
+
+.btn.ok {
+  background: linear-gradient(180deg, #059669 0%, #047857 100%);
+  border-color: #10b981;
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 1px 6px rgba(16, 185, 129, 0.25);
+}
+.btn.ok:hover {
+  background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+  border-color: #34d399;
+  color: #fff;
+}
+
+.btn.warn {
+  background: linear-gradient(180deg, #d97706 0%, #b45309 100%);
+  border-color: #f59e0b;
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 1px 6px rgba(245, 158, 11, 0.25);
+}
+.btn.warn:hover {
+  background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
+  border-color: #fbbf24;
+  color: #fff;
 }
 
 .btn.danger {
-  background: var(--crit-subtle);
-  border-color: var(--crit-border);
-  color: var(--crit);
+  background: linear-gradient(180deg, #dc2626 0%, #b91c1c 100%);
+  border-color: #ef4444;
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 1px 6px rgba(239, 68, 68, 0.25);
 }
 .btn.danger:hover {
-  background: var(--crit);
-  border-color: var(--crit);
+  background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+  border-color: #f87171;
   color: #fff;
 }
-.btn.danger.active {
-  background: var(--crit);
-  border-color: var(--crit);
+
+.btn.info {
+  background: linear-gradient(180deg, #4f46e5 0%, #4338ca 100%);
+  border-color: #6366f1;
   color: #fff;
-  box-shadow: 0 0 10px rgba(244, 63, 94, 0.4);
+  font-weight: 600;
+  box-shadow: 0 1px 6px rgba(99, 102, 241, 0.25);
+}
+.btn.info:hover {
+  background: linear-gradient(180deg, #6366f1 0%, #4f46e5 100%);
+  border-color: #818cf8;
+  color: #fff;
 }
 
 .btn.sm { height: 26px; padding: 0 9px; font-size: 12px; }
@@ -503,20 +543,22 @@ main {
 @media (max-width: 600px)  { .metric-grid { grid-template-columns: 1fr; } }
 
 .metric-card {
-  background: var(--bg-card);
+  background: linear-gradient(180deg, rgba(16, 21, 32, 0.75) 0%, rgba(13, 17, 26, 0.95) 100%);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 16px 18px;
+  padding: 18px 20px;
   display: flex;
   flex-direction: column;
   gap: 6px;
   position: relative;
   overflow: hidden;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
 }
 .metric-card:hover {
-  border-color: var(--border-hover);
-  background: var(--bg-card-hover);
+  border-color: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
 .metric-label {
@@ -641,13 +683,14 @@ main {
 }
 
 .tbl thead th {
-  padding: 10px 14px;
+  padding: 12px 16px;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   color: var(--text-muted);
   border-bottom: 1px solid var(--border);
+  background: rgba(10, 13, 20, 0.4);
   white-space: nowrap;
 }
 
@@ -656,10 +699,10 @@ main {
   transition: background 0.12s ease;
 }
 .tbl tbody tr:last-child { border-bottom: none; }
-.tbl tbody tr:hover { background: rgba(255, 255, 255, 0.025); }
+.tbl tbody tr:hover { background: rgba(255, 255, 255, 0.03); }
 
 .tbl tbody td {
-  padding: 11px 14px;
+  padding: 12px 16px;
   color: var(--text-secondary);
   vertical-align: middle;
 }
@@ -704,21 +747,22 @@ main {
 .badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
+  gap: 5px;
+  padding: 3px 9px;
   border-radius: var(--radius-pill);
   font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.03em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   border: 1px solid transparent;
   white-space: nowrap;
+  line-height: 1.2;
 }
-.badge.ok { background: var(--ok-subtle); color: var(--ok); border-color: var(--ok-border); }
-.badge.warn { background: var(--warn-subtle); color: var(--warn); border-color: var(--warn-border); }
-.badge.crit { background: var(--crit-subtle); color: var(--crit); border-color: var(--crit-border); }
-.badge.info { background: var(--accent-subtle); color: var(--accent); border-color: var(--accent-border); }
-.badge.ghost { background: rgba(255, 255, 255, 0.05); color: var(--text-muted); border-color: var(--border); }
+.badge.ok { background: rgba(16, 185, 129, 0.12); color: #34d399; border-color: rgba(16, 185, 129, 0.28); }
+.badge.warn { background: rgba(245, 158, 11, 0.12); color: #fbbf24; border-color: rgba(245, 158, 11, 0.28); }
+.badge.crit { background: rgba(244, 63, 94, 0.14); color: #fb7185; border-color: rgba(244, 63, 94, 0.32); }
+.badge.info { background: rgba(56, 189, 248, 0.12); color: #38bdf8; border-color: rgba(56, 189, 248, 0.28); }
+.badge.ghost { background: rgba(255, 255, 255, 0.04); color: var(--text-muted); border-color: var(--border); }
 
 .status-dot {
   display: inline-block;

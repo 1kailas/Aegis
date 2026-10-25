@@ -23,14 +23,17 @@
 
   <nav class="topbar-nav" id="navTabs">
     <button class="nav-btn active" data-tab="overview">
-      <span>📊</span> Production Monitor
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+      <span>Production Monitor</span>
     </button>
     <button class="nav-btn" data-tab="causality" id="navBtnCausality">
-      <span>🌐</span> Service Topology
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+      <span>Service Topology</span>
       <span class="nav-count crit" id="causalityTabBadge" style="display:none">1</span>
     </button>
     <button class="nav-btn" data-tab="incidents">
-      <span>🚨</span> Outages &amp; Auto-PR
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span>Outages &amp; Auto-PR</span>
       <span class="nav-count" id="incTabBadge" style="display:none">0</span>
     </button>
   </nav>
@@ -50,8 +53,13 @@
       </label>
     </div>
 
-    <button class="btn sm warn" id="btnTriggerTargetBug" title="Simulates a 500 error on demo target">💥 Simulate 500</button>
-    <a href="http://127.0.0.1:5050" target="_blank" class="btn sm ok" style="text-decoration:none;">Demo Store (5050) ↗</a>
+    <button class="btn sm warn" id="btnTriggerTargetBug" title="Simulates a 500 error on demo target">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      Simulate 500
+    </button>
+    <a href="http://127.0.0.1:5050" target="_blank" class="btn sm ok" style="text-decoration:none;">
+      Store Demo (5050) ↗
+    </a>
 
     <!-- Hidden compatibility elements for background scripts -->
     <div style="display:none;">
@@ -79,18 +87,30 @@
     <div class="sre-hero-info">
       <div class="flex items-center gap-10">
         <span class="live-pulse-dot"></span>
-        <span class="sre-hero-title">Live Target Service: <strong>Webliz Cloud Store</strong></span>
-        <span class="badge ok" style="font-size:11px;">127.0.0.1:5050</span>
+        <span class="sre-hero-title">Live Production Service: <strong>Webliz Cloud Store</strong></span>
+        <span class="badge ok" style="font-size:11px; font-family:var(--font-mono);">127.0.0.1:5050</span>
       </div>
       <div class="sre-hero-sub">
         Continuous HTTP inspection · Real-time error ingestion · Autonomous GitHub PR repair loop
       </div>
     </div>
     <div class="sre-hero-actions">
-      <button class="btn sm warn" id="btnTriggerTargetBug" title="Simulates a 500 error on checkout service">💥 Simulate 500 Outage</button>
-      <button class="btn sm ok" id="btnRecoverTarget" title="Verifies recovery via live HTTP probe and closes loop">✨ Verify &amp; Recover</button>
-      <button class="btn sm primary" id="btnOpenCausalityView">🌐 View Topology</button>
-      <button class="btn sm danger" id="btnTestSafety" title="Demonstrates deterministic guardian 403 block">🛡️ Safety Test (403)</button>
+      <button class="btn sm warn" id="btnTriggerTargetBugHero" onclick="$('btnTriggerTargetBug')?.click()" title="Simulates a 500 error on checkout service">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Simulate 500 Outage
+      </button>
+      <button class="btn sm ok" id="btnRecoverTarget" title="Verifies recovery via live HTTP probe and closes loop">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+        Verify &amp; Recover
+      </button>
+      <button class="btn sm primary" id="btnOpenCausalityView">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        View Topology
+      </button>
+      <button class="btn sm danger" id="btnTestSafety" title="Demonstrates deterministic guardian 403 block">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Safety Test (403)
+      </button>
       <button class="btn sm" id="btnOpenConnectTarget">+ Connect Website</button>
     </div>
   </div>
@@ -236,16 +256,25 @@
         <span id="keaIncidentStatusText">Incident <strong>Open</strong> <code id="keaIncidentCode">INC-001</code>, revision 1</span>
       </div>
       <div class="kea-pill flex items-center gap-8" style="background:rgba(20,26,38,0.8); border:1px solid rgba(255,255,255,0.1); border-radius:20px; padding:6px 14px; font-size:12px;">
-        <span style="font-size:14px;">⚡</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
         <span id="keaServicesAffected">Services affected: <strong>2/8</strong> (0 customer-facing)</span>
       </div>
     </div>
 
     <!-- Quick Simulation & Loop Control Actions -->
     <div class="flex items-center gap-8">
-      <button class="btn sm warn" id="keaSimulate500Btn" title="Triggers 500 failure on checkout target">Simulate 500 Outage</button>
-      <button class="btn sm ok" id="keaAutoRepairBtn" title="Engages Groq/Devin to synthesize patch and open PR">⚡ Auto-PR (Groq)</button>
-      <button class="btn sm info" id="keaVerifyRecoverBtn" title="Verifies recovery via live HTTP probe and closes loop">⚡ Verify &amp; Recover</button>
+      <button class="btn sm warn" id="keaSimulate500Btn" title="Triggers 500 failure on checkout target">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Simulate 500 Outage
+      </button>
+      <button class="btn sm ok" id="keaAutoRepairBtn" title="Engages Groq/Devin to synthesize patch and open PR">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        Auto-PR (Groq)
+      </button>
+      <button class="btn sm info" id="keaVerifyRecoverBtn" title="Verifies recovery via live HTTP probe and closes loop">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+        Verify &amp; Recover
+      </button>
       <button class="btn sm" id="keaResetBtn" title="Resets topology to all healthy">Reset State</button>
     </div>
   </div>
@@ -257,8 +286,8 @@
     <div class="panel" style="margin-bottom:0; display:flex; flex-direction:column; background:rgba(11,15,22,0.9); border:1px solid var(--border); border-radius:8px; overflow:hidden;">
       <div class="panel-header" style="padding:12px 18px; border-bottom:1px solid var(--border);">
         <div class="flex items-center gap-10">
-          <span style="font-size:18px;">☊</span>
-          <span style="font-weight:700; font-size:14px; letter-spacing:0.3px; color:var(--text-primary);">Topology</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          <span style="font-weight:700; font-size:14px; letter-spacing:0.3px; color:var(--text-primary);">Service Dependency Graph</span>
         </div>
         <!-- Legend (exact match to Kea) -->
         <div class="flex items-center gap-16" style="font-size:11px; color:var(--text-muted);">
@@ -298,7 +327,7 @@
       <!-- Incident Header -->
       <div class="panel-header" style="padding:12px 16px; border-bottom:1px solid var(--border);">
         <div class="flex items-center gap-10">
-          <span style="font-size:16px;">🎯</span>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
           <div>
             <div style="font-weight:700; font-size:13px; color:var(--text-primary);" id="keaRightIncidentTitle">Incident INC-001</div>
             <div style="font-size:10px; color:var(--text-muted);" id="keaRightIncidentSub">Opened 10:44:20, 2 services affected, revision 1</div>
@@ -351,14 +380,17 @@
           <div style="font-size:11px; color:var(--text-muted); margin-bottom:4px;">Affected Components: <code id="keaDiagFilesText">demo-target/app.py</code></div>
           <div style="font-size:11px; color:var(--text-muted);">Reproduction: <span id="keaDiagReproText">Triggered via /trigger-bug simulation</span></div>
         </div>
-        <button class="btn sm ok" id="keaDelegateBtn" style="width:100%;">⚡ Dispatch to Autonomous PR Engine</button>
+        <button class="btn sm ok" id="keaDelegateBtn" style="width:100%;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          Dispatch to Autonomous PR Engine
+        </button>
       </div>
 
       <!-- Sub-Tab 3: Fix & Auto-PR (The Kea Gap Closed!) -->
       <div id="keaSubTabFix" style="padding:14px; overflow-y:auto; flex:1; display:none; flex-direction:column; gap:12px;">
         <div class="flex items-center justify-between">
           <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted);">Synthesized Code Fix &amp; PR</div>
-          <span class="badge" style="background:rgba(249,115,22,0.18); color:#f97316;" id="keaPrEngineBadge">⚡ Groq Llama-3.1</span>
+          <span class="badge" style="background:rgba(249,115,22,0.18); color:#f97316;" id="keaPrEngineBadge">⚡ Groq Qwen-27B</span>
         </div>
 
         <!-- PR Metadata Link -->
@@ -366,7 +398,7 @@
           <div style="font-size:11px; color:var(--text-muted); margin-bottom:4px;">Branch: <code id="keaBranchName">aegis/repair-inc-001</code></div>
           <div class="flex items-center gap-8">
             <span style="font-size:11px;">Pull Request:</span>
-            <a href="#" target="_blank" class="badge info" id="keaPrUrlLink" style="text-decoration:none;">https://github.com/1kailas/Aegis/pull/42 ↗</a>
+            <a href="#" target="_blank" class="badge info" id="keaPrUrlLink" style="text-decoration:none;">https://github.com/1kailas/Aegis/pull/2 ↗</a>
           </div>
         </div>
 
@@ -378,12 +410,15 @@
 
         <!-- Predict & Verify Impact -->
         <div style="background:rgba(56,189,248,0.08); border:1px solid rgba(56,189,248,0.2); border-radius:6px; padding:10px 12px; font-size:11px;">
-          <div style="color:#38bdf8; font-weight:bold; margin-bottom:2px;">🔮 Predict, Then Verify:</div>
+          <div style="color:#38bdf8; font-weight:bold; margin-bottom:2px;">Predict, Then Verify:</div>
           <div style="color:#cbd5e1;" id="keaPredictOutcomeText">Fixing demo-target/app.py will restore Checkout Service and Downstream Payment Engine to HTTP 200 OK.</div>
         </div>
 
         <!-- Verification Action Button -->
-        <button class="btn sm ok" id="keaCloseLoopCtaBtn" style="width:100%; padding:10px; font-weight:bold; font-size:12px;">⚡ Verify &amp; Close Loop (Live Probe)</button>
+        <button class="btn sm ok" id="keaCloseLoopCtaBtn" style="width:100%; padding:10px; font-weight:bold; font-size:12px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          Verify &amp; Close Loop (Live Probe)
+        </button>
       </div>
 
     </div>
@@ -441,9 +476,15 @@
       <div class="panel-actions">
         <button class="btn sm" id="copyIncCliBtn">Copy CLI</button>
         <button class="btn sm primary" id="runDiagBtn">Diagnose (Software Tier 2)</button>
-        <button class="btn sm ok" id="delegateDevinBtn">⚡ Autonomous PR (Groq/Devin)</button>
-        <button class="btn sm" id="pollDevinBtn">Poll Devin Status</button>
-        <button class="btn sm info" id="closeLoopBtn">Verify &amp; Close Loop</button>
+        <button class="btn sm ok" id="delegateDevinBtn">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          Autonomous PR (Groq)
+        </button>
+        <button class="btn sm" id="pollDevinBtn">Poll Status</button>
+        <button class="btn sm info" id="closeLoopBtn">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          Verify &amp; Close Loop
+        </button>
         <button class="btn sm" id="closeIncDetailBtn">Close</button>
       </div>
     </div>

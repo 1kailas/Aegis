@@ -488,6 +488,10 @@ STOREFRONT_HTML = """
 
 @app.route("/")
 def index():
+    html_path = os.path.join(os.path.dirname(__file__), "storefront.html")
+    if os.path.exists(html_path):
+        with open(html_path, "r", encoding="utf-8") as f:
+            return f.read()
     return render_template_string(STOREFRONT_HTML)
 
 
