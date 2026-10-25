@@ -79,6 +79,7 @@ Aegis enforces a strict **Dual-Plane Separation of Concerns**:
             |   Live PR: https://github.com/1kailas/Aegis/pull/X    |
             +-------------------------------------------------------+
 ```
+<img width="1914" height="962" alt="Screenshot 2026-10-25 072646" src="https://github.com/user-attachments/assets/69c5d154-eb59-4bb1-8092-24d7aa9086c4" />
 
 ### 1. Deterministic Observation & Safety Plane
 * **Probes & Watchdogs**: Monitored endpoints are probed continuously with configurable interval and failure thresholds.
